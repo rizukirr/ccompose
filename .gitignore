@@ -1,0 +1,8 @@
+/.omc
+**/.omc
+/.omx
+**/.omx
+/build
+/external/clay
+/compile_commands.json
+/.codex

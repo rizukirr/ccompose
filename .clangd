@@ -1,0 +1,5 @@
+CompileFlags:
+  Add: [-DCCOMPOSE_IMPLEMENTATION, -Wno-macro-redefined]
+Diagnostics:
+  ClangTidy:
+    Remove: [misc-definitions-in-headers]

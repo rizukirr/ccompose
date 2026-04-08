@@ -1,0 +1,699 @@
+/* ccompose.h — Jetpack-Compose-shaped wrapper around Clay.
+ * =========================================================================
+ *
+ * ccompose gives Clay a declarative, scoped-block UI syntax that reads
+ * like Jetpack Compose while staying plain C. Every container opens a
+ * real Clay element under the hood; every field you set maps 1:1 onto
+ * Clay's own config structs. There is no hidden state, no tree, no
+ * runtime allocation per frame.
+ *
+ * Backend: raylib by default. Build ccompose with
+ * -DCCOMPOSE_BACKEND_RAYLIB=OFF for headless mode; the same option is
+ * propagated to consumers as CCOMPOSE_NO_BACKEND via the CMake target.
+ *
+ * This is the public header. Link against libccompose (built from
+ * src/ccompose.c) for the implementation — there is no
+ * CCOMPOSE_IMPLEMENTATION define.
+ *
+ * -------------------------------------------------------------------------
+ * Minimal usage
+ * -------------------------------------------------------------------------
+ *
+ *   #include "ccompose.h"
+ *
+ *   int main(void) {
+ *       CC_SetWindow(960, 640, "Hello");
+ *       CC_Init();
+ *       while (CC_Running()) {
+ *           CC_Begin();
+ *           Column("Root",
+ *                  .layout = { .sizing  = { Grow(), Grow() },
+ *                              .padding = PadAll(24) },
+ *                  .backgroundColor = Color(18, 18, 20, 255)) {
+ *               Text("Hello, world!",
+ *                    .textColor = Color(255, 255, 255, 255),
+ *                    .fontSize  = 32);
+ *           }
+ *           CC_End();
+ *       }
+ *       CC_Shutdown();
+ *   }
+ *
+ * -------------------------------------------------------------------------
+ * Mental model
+ * -------------------------------------------------------------------------
+ *
+ *   Column("id", .field = value, ...) { children }
+ *
+ * expands to a `for` loop that runs exactly once. On entry it opens a
+ * Clay element, configures it with the `Clay_ElementDeclaration` literal
+ * you wrote, and runs the block. On exit it closes the element. Every
+ * nested Column/Row/Box/Text inside the block becomes a child of that
+ * element. No hidden tree — Clay holds the layout state in its arena.
+ *
+ * Because the macro expands to a loop, you can't `break` out of a block
+ * and expect the element to close (the `break` would skip the close
+ * step). Use `return`/`goto` from inside a block only with care.
+ *
+ * -------------------------------------------------------------------------
+ * What's in this header
+ * -------------------------------------------------------------------------
+ *
+ *   Type aliases        CC_Decl, CC_TextStyle, CC_RenderCommandArray, ...
+ *   Sugar               Fit(), Grow(), Fixed(), Percent(), PadAll(), Pad(),
+ *                       RadiusAll(), Color(), AlignStart/Center/End, etc.
+ *   Lifecycle           CC_Init, CC_Begin, CC_End, CC_Running, CC_Shutdown
+ *                       CC_SetWindow, CC_SetWindowFlags, CC_SetBackground,
+ *                       CC_SetErrorHandler, CC_LoadFont, CC_SetViewport
+ *   Container macros    Column("id", ...), Row("id", ...), Box("id", ...),
+ *                       Element(direction, "id", ...)
+ *   Text macros         Text("literal", ...), TextN(chars, length, ...)
+ */
+
+#ifndef CCOMPOSE_H
+#define CCOMPOSE_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "clay.h"
+
+#ifndef CCOMPOSE_NO_BACKEND
+/* When the raylib backend is active, raylib.h is exposed from the public
+ * header so user code can freely use raylib types (Vector2, Font, FLAG_*)
+ * alongside ccompose macros without a separate include. */
+#include "raylib.h"
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* =========================================================================
+ * Type aliases
+ * =========================================================================
+ *
+ * These are all straightforward typedefs of the underlying Clay types —
+ * use either spelling interchangeably. They exist so ccompose code can
+ * have a consistent CC_ prefix for its own types without introducing any
+ * new concepts. For example:
+ *
+ *     CC_RenderCommandArray commands = CC_End();
+ *     for (int32_t i = 0; i < commands.length; ++i) {
+ *         CC_RenderCommand *cmd = Clay_RenderCommandArray_Get(&commands, i);
+ *         // cmd->commandType is one of CLAY_RENDER_COMMAND_TYPE_*
+ *     }
+ */
+
+typedef Clay_ElementDeclaration CC_Decl;     /* element config struct       */
+typedef Clay_TextElementConfig CC_TextStyle; /* text config struct         */
+typedef Clay_RenderCommandArray CC_RenderCommandArray; /* what CC_End returns*/
+typedef Clay_RenderCommand CC_RenderCommand;           /* one command entry */
+typedef Clay_ErrorData CC_ErrorData;                   /* error callback data*/
+typedef Clay_ElementId CC_ElementId;                   /* hashed element id */
+typedef Clay_Dimensions CC_Dimensions;                 /* {width, height}   */
+typedef Clay_Vector2 CC_Vector2;                       /* {x, y} floats     */
+typedef Clay_Color CC_Color;                           /* {r, g, b, a} 0–255*/
+typedef Clay_String CC_String;                         /* {chars, length}   */
+
+/* =========================================================================
+ * Sugar — sizing, padding, color, alignment
+ * =========================================================================
+ *
+ * Shorter aliases for Clay's CLAY_* macros. Every one of these expands to
+ * an expression of the right Clay type, so they can be used anywhere
+ * Clay expects them (including inside raw CLAY() blocks).
+ */
+
+/* ------- Sizing ---------------------------------------------------------
+ *
+ * Used as the `.width` / `.height` of a `Clay_Sizing`, e.g.
+ *
+ *     .layout = { .sizing = { Grow(), Fixed(240) } }
+ *
+ *   Fit()        — shrink-wrap around children (the Clay default).
+ *                  An element with Fit on both axes will be just big
+ *                  enough to contain its children + padding.
+ *
+ *   Grow()       — consume all remaining space along this axis, shared
+ *                  proportionally with sibling Grow()s. Acts like CSS
+ *                  `flex: 1`. Most "fill the screen" containers use
+ *                  `.sizing = { Grow(), Grow() }`.
+ *
+ *   Fixed(n)     — exactly n pixels on this axis. Use for sidebars,
+ *                  toolbars, avatars, anything with a hard size.
+ *
+ *   Percent(p)   — p * parent-size, where p is a float in [0.0, 1.0].
+ *                  Clay errors out for values outside this range, so
+ *                  0.5f is half the parent, not 50.
+ */
+#define Fit() CLAY_SIZING_FIT(0, 0)
+#define Grow() CLAY_SIZING_GROW(0, 0)
+#define Fixed(n) CLAY_SIZING_FIXED(n)
+#define Percent(p) CLAY_SIZING_PERCENT(p)
+
+/* ------- Padding --------------------------------------------------------
+ *
+ * Used as the `.padding` of a `Clay_LayoutConfig`.
+ *
+ *   PadAll(n)            — n pixels on all four sides.
+ *   Pad(l, r, t, b)      — per-side padding, in (left, right, top, bottom)
+ *                          order (note: NOT the CSS T/R/B/L convention).
+ *
+ * Padding stacks inside the element's bounding box — it eats into the
+ * available space for children, it does not grow the box.
+ */
+#define PadAll(n) CLAY_PADDING_ALL(n)
+#define Pad(l, r, t, b) ((Clay_Padding){(l), (r), (t), (b)})
+
+/* ------- Color & rounding ----------------------------------------------
+ *
+ *   Color(r, g, b, a)    — a Clay_Color literal. Channels are 0–255,
+ *                          alpha included. Example:
+ *                              .backgroundColor = Color(24, 24, 24, 255)
+ *
+ *   RadiusAll(n)         — a Clay_CornerRadius with all four corners = n.
+ *                          Use large values (e.g. 999) for a pill/circle.
+ *                          For per-corner control write the literal by
+ *                          hand:
+ *                              .cornerRadius = (Clay_CornerRadius){
+ *                                  .topLeft = 8, .topRight = 8 }
+ */
+#define RadiusAll(n) CLAY_CORNER_RADIUS(n)
+#define Color(r, g, b, a) ((Clay_Color){(r), (g), (b), (a)})
+
+/* ------- Child alignment ------------------------------------------------
+ *
+ * Used as the `.childAlignment` of a Clay_LayoutConfig, e.g.
+ *
+ *     .layout = { .childAlignment = { .x = AlignCenter(),
+ *                                     .y = AlignMiddle() } }
+ *
+ *   Horizontal (x):  AlignStart | AlignCenter | AlignEnd
+ *   Vertical   (y):  AlignTop   | AlignMiddle | AlignBottom
+ *
+ * Alignment applies to children as a group along the cross-axis of the
+ * parent's layout direction. In a Row, `.y = AlignMiddle()` vertically
+ * centers every child; in a Column, `.x = AlignCenter()` horizontally
+ * centers every child.
+ */
+#define AlignStart() CLAY_ALIGN_X_LEFT
+#define AlignCenter() CLAY_ALIGN_X_CENTER
+#define AlignEnd() CLAY_ALIGN_X_RIGHT
+#define AlignTop() CLAY_ALIGN_Y_TOP
+#define AlignMiddle() CLAY_ALIGN_Y_CENTER
+#define AlignBottom() CLAY_ALIGN_Y_BOTTOM
+
+/* =========================================================================
+ * Lifecycle
+ * =========================================================================
+ *
+ * ccompose bundles a raylib-based window, a Clay arena, and a default
+ * text measure function behind six lifecycle calls. The typical program
+ * shape is:
+ *
+ *     CC_SetWindow(w, h, title);   // optional, before CC_Init
+ *     CC_Init();                   // once at startup
+ *     while (CC_Running()) {       // main loop
+ *         CC_Begin();              //   start a frame
+ *         // ... Column/Row/Text macros here ...
+ *         CC_End();                //   end frame, draw, present
+ *     }
+ *     CC_Shutdown();               // also runs via atexit()
+ *
+ * You don't have to call CC_Shutdown() — it's registered with atexit()
+ * inside CC_Init() — but doing so makes teardown order explicit if you
+ * care.
+ *
+ * ------- Overriding the raylib backend's defaults ------------------------
+ *
+ * Override BEFORE CC_Init() (they're captured at init time):
+ *
+ *     CC_SetWindow(1280, 720, "My App");
+ *     CC_SetWindowFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
+ *     CC_SetBackground(Color(0, 0, 0, 255));
+ *     CC_SetErrorHandler(my_error_sink);
+ *
+ * Override AFTER CC_Init() by calling Clay directly — once the Clay
+ * context exists, its setters just mutate its state:
+ *
+ *     Clay_SetMeasureTextFunction(my_measure, my_user_data);
+ *     Clay_SetLayoutDimensions((Clay_Dimensions){w, h});
+ *     Clay_SetPointerState((Clay_Vector2){mx, my}, down);
+ *     Clay_SetMaxElementCount(16384);   // note: affects next reset only
+ *
+ * For custom fonts, use CC_LoadFont() which returns a fontId you pass
+ * to Text(.fontId = ..., .fontSize = ...).
+ *
+ * If you outgrow this lifecycle and want full control (custom arena,
+ * multiple Clay contexts, a non-raylib renderer), ignore CC_Init /
+ * CC_Begin / CC_End entirely and call Clay_Initialize / Clay_BeginLayout
+ * / Clay_EndLayout yourself. Every element macro in this header works
+ * identically regardless of how Clay was set up.
+ */
+
+/* Set the window size and title used by the next CC_Init() call. Has no
+ * effect after CC_Init() (changing the window mid-session is raylib's
+ * job — call SetWindowSize / SetWindowTitle directly). Title pointer
+ * must outlive the call; passing NULL leaves the previous title. */
+void CC_SetWindow(int width, int height, const char *title);
+
+/* Set the raylib window flags (FLAG_WINDOW_RESIZABLE, FLAG_MSAA_4X_HINT,
+ * FLAG_VSYNC_HINT, FLAG_WINDOW_HIGHDPI, etc.) used by the next CC_Init()
+ * call. Default is RESIZABLE | MSAA_4X_HINT | VSYNC_HINT. */
+void CC_SetWindowFlags(unsigned int raylib_flags);
+
+/* Set the background color used by CC_End() (via ClearBackground). The
+ * color applies on every subsequent frame — call again to change it. */
+void CC_SetBackground(Clay_Color color);
+
+/* Install a custom Clay error handler. If unset, ccompose prints error
+ * text to stderr. Must be called BEFORE CC_Init(); Clay bakes the
+ * handler into its state on initialization. */
+void CC_SetErrorHandler(void (*handler)(CC_ErrorData));
+
+/* Idempotent: safe to call multiple times. First call:
+ *   - Creates the raylib window with CC_SetWindow / CC_SetWindowFlags
+ *   - Loads the default raylib font into slot 0
+ *   - Allocates Clay's arena via Clay_MinMemorySize()
+ *   - Calls Clay_Initialize with the stored viewport + error handler
+ *   - Installs Raylib_MeasureText as Clay's measure function
+ *   - Registers CC_Shutdown with atexit()
+ * Subsequent calls are no-ops. */
+void CC_Init(void);
+
+/* Unload custom fonts, Clay_Raylib_Close (closes the window), free the
+ * arena. Also runs automatically via atexit(), so explicit calls are
+ * only needed when you want deterministic teardown order. Safe to call
+ * multiple times. */
+void CC_Shutdown(void);
+
+/* Returns whether the window is still open (raylib's
+ * !WindowShouldClose()). Use as your main-loop condition:
+ *
+ *     while (CC_Running()) { ... }
+ *
+ * In headless mode (CCOMPOSE_NO_BACKEND) this always returns true — you
+ * have to break out of the loop yourself. */
+bool CC_Running(void);
+
+/* Start a new frame. Reads raylib's input state (window size, mouse
+ * position, mouse button, scroll wheel, frame time), feeds it into Clay
+ * via Clay_SetLayoutDimensions / Clay_SetPointerState /
+ * Clay_UpdateScrollContainers, then calls Clay_BeginLayout(). After
+ * this, Column/Row/Box/Text macros inside the current block get
+ * recorded into Clay's layout. */
+void CC_Begin(void);
+
+/* End the current frame. Calls Clay_EndLayout(GetFrameTime()) to get
+ * the render command list, then:
+ *   - BeginDrawing()
+ *   - ClearBackground(CC_SetBackground value)
+ *   - Clay_Raylib_Render(commands, ccompose_fonts)
+ *   - EndDrawing()
+ *
+ * Returns the same command array Clay emitted, in case you want to
+ * inspect or post-process it — by the time you see the return value the
+ * frame has already been drawn. In headless mode this just returns the
+ * commands without drawing anything. */
+CC_RenderCommandArray CC_End(void);
+
+/* Load a font file into a new slot. Returns the fontId to pass to
+ * Text(.fontId = ..., .fontSize = ...), or -1 if the font couldn't be
+ * loaded (raylib returns its default font on failure; we don't burn a
+ * slot on that). Must be called AFTER CC_Init() so raylib has an active
+ * GL context. The default raylib font is always present at id 0, so you
+ * never need to load a font at all for basic rendering.
+ *
+ * Loaded fonts are automatically unloaded by CC_Shutdown(). Up to
+ * CC_MAX_FONTS (16) custom slots are available.
+ *
+ * Example:
+ *
+ *     int FONT_TITLE = CC_LoadFont("resources/Roboto-Bold.ttf", 48);
+ *     ...
+ *     Text("Big title",
+ *          .fontId   = FONT_TITLE,
+ *          .fontSize = 48,
+ *          .textColor = Color(255, 255, 255, 255));
+ */
+int CC_LoadFont(const char *path, int base_size);
+
+/* Load a font and make it the global default text font.
+ *
+ * This is a convenience wrapper around CC_LoadFont():
+ *   1) loads the font into a slot
+ *   2) stores that slot as the "global font id"
+ *
+ * Text() / TextN() use this global font id whenever the call does not
+ * explicitly choose a non-zero .fontId. In other words:
+ *
+ *   Text("A", .fontSize = 16);                  // uses global font
+ *   Text("B", .fontId = TITLE_ID, .fontSize=16);// explicit override
+ *   Text("C", .fontId = 0, .fontSize = 16);     // also uses global font
+ *
+ * Returns:
+ *   - loaded font id (>= 0) on success
+ *   - -1 on failure (global font id is left unchanged)
+ *
+ * Requirements and limits are the same as CC_LoadFont():
+ *   - call AFTER CC_Init()
+ *   - consumes one custom font slot (max CC_MAX_FONTS)
+ *
+ * Headless mode (CCOMPOSE_NO_BACKEND):
+ *   - always returns -1
+ *   - no font loading occurs
+ */
+int CC_LoadGlobalFont(const char *path, int base_size);
+
+/* Returns the currently configured global text font id.
+ * Defaults to 0 (raylib default font). */
+int CC_GetGlobalFontId(void);
+
+/* Set the Clay viewport for headless mode (CCOMPOSE_NO_BACKEND). When
+ * the raylib backend is active this is effectively a no-op — CC_Begin
+ * reads GetScreenWidth/GetScreenHeight every frame and overwrites
+ * whatever you set here. Useful in tests to give Clay a deterministic
+ * frame size without opening a real window. */
+void CC_SetViewport(float width, float height);
+
+/* =========================================================================
+ * Element scope — Column, Row, Box, Element
+ * =========================================================================
+ *
+ * All four macros open a Clay element, run your block as its children,
+ * and close the element on exit. They take the same arguments:
+ *
+ *     Column("id",  .field = value, ...) { children }
+ *     Row("id",     .field = value, ...) { children }
+ *     Box("id",     .field = value, ...) { children }
+ *     Element(dir, "id", .field = value, ...) { children }
+ *
+ * The first argument is a **string literal** ID. Pass "" for anonymous
+ * elements — Clay still generates an internal ID for layout bookkeeping,
+ * but you can't target it from Clay_OnHover, Clay_PointerOver,
+ * scroll-offset persistence, or floating .parentId anchoring. Use a
+ * real ID when you need any of those features, "" when you don't.
+ *
+ * The macro enforces the string-literal constraint at compile time via
+ * the `"" id ""` literal-concatenation trick: pass a const char*, NULL,
+ * an int, or anything else and you'll get a compile error right at the
+ * call site.
+ *
+ * The remaining arguments are `Clay_ElementDeclaration` designated
+ * initializers. **Every Clay field is available** — ccompose doesn't
+ * wrap or rename anything:
+ *
+ *     .layout           — Clay_LayoutConfig: sizing, padding, gap,
+ *                         alignment, layoutDirection (overwritten by
+ *                         Column/Row/Box to guarantee the direction).
+ *     .backgroundColor  — Clay_Color. If you also set .image, this acts
+ *                         as a tint on the image.
+ *     .overlayColor     — color blended over the element and its
+ *                         children ("mix" in GLSL terms).
+ *     .cornerRadius     — Clay_CornerRadius (use RadiusAll(n) for a
+ *                         uniform radius, or build by hand for per-
+ *                         corner control).
+ *     .image            — Clay_ImageElementConfig, a .imageData void*
+ *                         passed to the renderer (Texture2D* for the
+ *                         raylib backend). Turns the element into an
+ *                         IMAGE render command.
+ *     .floating         — Clay_FloatingElementConfig: takes the element
+ *                         out of normal flow, positions it relative to
+ *                         a parent / the root / a specific ID, with a
+ *                         zIndex and optional attachPoints.
+ *     .clip             — Clay_ClipElementConfig: .horizontal/.vertical
+ *                         booleans + .childOffset Vector2 to make the
+ *                         element a scroll viewport.
+ *     .aspectRatio      — Clay_AspectRatioElementConfig: width/height
+ *                         ratio as a single float.
+ *     .border           — Clay_BorderElementConfig: color + per-side
+ *                         pixel widths.
+ *     .custom           — Clay_CustomElementConfig: .customData void*
+ *                         that becomes a CUSTOM render command the
+ *                         renderer can draw however it wants.
+ *     .userData         — arbitrary void* forwarded to every render
+ *                         command generated by this element.
+ *
+ * See include/clay.h for each sub-struct's full field list — ccompose
+ * deliberately doesn't duplicate that documentation.
+ *
+ * ------- Why three macros if Clay only has two directions? --------------
+ *
+ * Column  → CLAY_TOP_TO_BOTTOM. Vertical stacks, lists, sidebars.
+ * Row     → CLAY_LEFT_TO_RIGHT. Horizontal stacks, toolbars, split panes.
+ * Box     → CLAY_TOP_TO_BOTTOM (same as Column internally) — the name
+ *           signals "direction doesn't matter here" for two patterns:
+ *             1. Single-child decoration / frame (image box, avatar,
+ *                badge, aspect-ratio container).
+ *             2. Stacked overlays where every child uses .floating to
+ *                take itself out of normal flow.
+ *
+ * Element(direction, "id", ...) is the generic form: use it when you
+ * need to choose the direction at runtime (e.g. a toolbar that flips
+ * between horizontal and vertical based on window orientation).
+ *
+ * ------- Nesting and shadowing ------------------------------------------
+ *
+ * The macros use __COUNTER__ to generate unique scope variable names,
+ * so nested blocks don't trigger -Wshadow even at arbitrary depth:
+ *
+ *     Column("A") {
+ *         Row("B") {
+ *             Box("C") {
+ *                 Column("", .layout = { .childGap = 4 }) {
+ *                     Text("deep",
+ *                          .textColor = Color(255,255,255,255),
+ *                          .fontSize  = 12);
+ *                 }
+ *             }
+ *         }
+ *     }
+ *
+ * ------- Control flow caveats -------------------------------------------
+ *
+ * The macro expands to a `for` loop with a single iteration. Normal
+ * `break` statements inside the block will exit the loop WITHOUT
+ * running the close step — leaving a dangling open element in Clay's
+ * internal stack, which Clay will report as an UNBALANCED_OPEN_CLOSE
+ * error at end-of-layout. If you need early exit, use `continue`
+ * (which runs the loop's step clause, closing the element), or wrap
+ * the block in a helper function and `return`.
+ *
+ * Don't put the macro as the unbraced body of an `if` / `while` /
+ * `else` — wrap in `{ ... }` if you need that shape, because the
+ * macro expands to a statement that wants to own its own scope.
+ */
+
+/* A single-iteration-loop scope tracker. You shouldn't create these
+ * directly — the Column/Row/Box macros construct them. */
+typedef struct {
+  int active;
+} CC_Scope;
+
+/* Opens a Clay element with the given id (or anonymously if id_len is
+ * 0), forces decl.layout.layoutDirection to `direction`, and configures
+ * the element via Clay__ConfigureOpenElement(). You generally don't
+ * call this directly — it's the runtime hook the Column/Row/Box macros
+ * expand into. */
+CC_Scope CC_OpenElement(const char *id_chars, int32_t id_len,
+                        Clay_LayoutDirection direction,
+                        Clay_ElementDeclaration decl);
+
+/* Closes the element opened by CC_OpenElement. Idempotent: only closes
+ * once per scope, subsequent calls are no-ops. */
+void CC_CloseScope(CC_Scope *scope);
+
+/* __COUNTER__ guarantees a unique scope variable name per call site, so
+ * nested Column/Row/Box blocks don't trigger -Wshadow. */
+#define CC_JOIN2_(a, b) a##b
+#define CC_JOIN_(a, b) CC_JOIN2_(a, b)
+#define CC_SCOPE_NAME_(c) CC_JOIN_(cc_scope_, CC_JOIN_(c, _))
+
+/* The `"" id_literal ""` trick: prepending and appending an empty
+ * string literal forces C's literal-concatenation rule, which only
+ * applies if id_literal is itself a string literal. Anything else
+ * (NULL, a pointer, an integer) fails to compile here, giving us a
+ * free type check at the call site. sizeof("" id_literal "") - 1 is
+ * the compile-time length. */
+#define CC_ELEMENT_IMPL_(scope, direction, id_literal, ...)                    \
+  for (CC_Scope scope = CC_OpenElement(                                        \
+           "" id_literal "", (int32_t)(sizeof("" id_literal "") - 1),          \
+           (direction), (Clay_ElementDeclaration){__VA_ARGS__});               \
+       scope.active; CC_CloseScope(&scope))
+
+/* Element — the generic container. Use when you need to pick the
+ * layout direction at runtime; otherwise prefer Column / Row / Box.
+ *
+ *     Element(orientation == VERTICAL ? CLAY_TOP_TO_BOTTOM
+ *                                     : CLAY_LEFT_TO_RIGHT,
+ *             "Toolbar", .layout = { .childGap = 8 }) { ... }
+ */
+#define Element(direction, id_literal, ...)                                    \
+  CC_ELEMENT_IMPL_(CC_SCOPE_NAME_(__COUNTER__), (direction), id_literal,       \
+                   __VA_ARGS__)
+
+/* Column — vertical stack (CLAY_TOP_TO_BOTTOM). Children are laid out
+ * from top to bottom with `.layout.childGap` between them.
+ *
+ *     Column("Sidebar",
+ *            .layout = { .sizing   = { Fixed(220), Grow() },
+ *                        .padding  = PadAll(16),
+ *                        .childGap = 8 },
+ *            .backgroundColor = COLOR_SURFACE,
+ *            .cornerRadius    = RadiusAll(8)) {
+ *         Text("Menu", .textColor = COLOR_TEXT, .fontSize = 12);
+ *         // ...
+ *     }
+ */
+#define Column(id_literal, ...)                                                \
+  Element(CLAY_TOP_TO_BOTTOM, id_literal, __VA_ARGS__)
+
+/* Row — horizontal stack (CLAY_LEFT_TO_RIGHT). Children are laid out
+ * left to right with `.layout.childGap` between them. Use
+ * `.layout.childAlignment.y = AlignMiddle()` to vertically center the
+ * children within the row's height.
+ *
+ *     Row("Toolbar",
+ *         .layout = { .sizing = { Grow(), Fixed(40) },
+ *                     .padding = PadAll(8),
+ *                     .childGap = 12,
+ *                     .childAlignment = { .y = AlignMiddle() } }) {
+ *         Text("File", .textColor = COLOR_TEXT, .fontSize = 14);
+ *         Text("Edit", .textColor = COLOR_TEXT, .fontSize = 14);
+ *         Text("View", .textColor = COLOR_TEXT, .fontSize = 14);
+ *     }
+ */
+#define Row(id_literal, ...)                                                   \
+  Element(CLAY_LEFT_TO_RIGHT, id_literal, __VA_ARGS__)
+
+/* Box — a direction-neutral container. Clay has no native z-stack
+ * layout mode (children always flow LTR or TTB), so Box is most useful
+ * for two patterns:
+ *
+ *   1. Single-child decoration / frame. The child fills the box (e.g.
+ *      via `.layout.sizing = { Grow(), Grow() }`) and the box carries
+ *      the styling:
+ *
+ *          Box("Avatar",
+ *              .layout = { .sizing = { Fixed(64), Fixed(64) } },
+ *              .image  = { .imageData = my_texture },
+ *              .cornerRadius = RadiusAll(999)) { }
+ *
+ *   2. Stacked / overlay children — each child opts into .floating so
+ *      it's taken out of normal flow and layered on top:
+ *
+ *          Box("Card",
+ *              .layout = { .sizing = { Grow(), Fixed(220) } },
+ *              .backgroundColor = COLOR_SURFACE,
+ *              .cornerRadius    = RadiusAll(12)) {
+ *
+ *              // background image layer
+ *              Box("CardBg",
+ *                  .layout = { .sizing = { Grow(), Grow() } },
+ *                  .image  = { .imageData = bg_texture },
+ *                  .floating = { .attachTo = CLAY_ATTACH_TO_PARENT,
+ *                                .zIndex = 0 }) { }
+ *
+ *              // foreground text layer
+ *              Column("CardText",
+ *                  .layout = { .padding = PadAll(16) },
+ *                  .floating = { .attachTo = CLAY_ATTACH_TO_PARENT,
+ *                                .zIndex = 1 }) {
+ *                  Text("Title", .textColor = COLOR_TEXT,
+ *                                .fontSize = 24);
+ *              }
+ *          }
+ *
+ * Internally Box maps to CLAY_TOP_TO_BOTTOM — any direction works when
+ * there are 0–1 normal children or when all children are floating. */
+#define Box(id_literal, ...)                                                   \
+  Element(CLAY_TOP_TO_BOTTOM, id_literal, __VA_ARGS__)
+
+/* =========================================================================
+ * Text
+ * =========================================================================
+ *
+ * Leaf element — not a scoped block. Text() takes a **string literal**
+ * and a `Clay_TextElementConfig` literal with the text style:
+ *
+ *     Text("Hello, world!",
+ *          .textColor     = Color(255, 255, 255, 255),
+ *          .fontId        = 0,                       // default font
+ *          .fontSize      = 14,
+ *          .letterSpacing = 0,
+ *          .lineHeight    = 0,
+ *          .wrapMode      = CLAY_TEXT_WRAP_WORDS,    // default
+ *          .textAlignment = CLAY_TEXT_ALIGN_LEFT);   // default
+ *
+ * See include/clay.h for the full Clay_TextElementConfig field list.
+ *
+ * Clay needs a measure function to know how wide text will render.
+ * ccompose installs raylib's Raylib_MeasureText by default, so out of
+ * the box Text() works with the built-in raylib font at any size. To
+ * use custom fonts:
+ *
+ *   - Per-call: use CC_LoadFont() and pass the returned id as .fontId.
+ *   - Global default: use CC_LoadGlobalFont(); Text/TextN calls with
+ *     omitted (or zero) .fontId will use that global id.
+ *
+ * Font-id precedence inside Text/TextN:
+ *   1) if .fontId is non-zero, that explicit value wins
+ *   2) otherwise, ccompose injects CC_GetGlobalFontId()
+ *   3) if no global font was set, this falls back to 0 (raylib default)
+ *
+ * ------- Text() vs TextN() -----------------------------------------------
+ *
+ * Text("literal", ...) requires a true string literal — the length is
+ * computed at compile time via sizeof("literal") - 1, and Clay stores
+ * the chars pointer with .isStaticallyAllocated = true so its measure
+ * cache can key on pointer identity.
+ *
+ * TextN(chars, length, ...) takes a runtime (chars, length) pair for
+ * dynamic strings — string slices, snprintf'd buffers, UTF-8 chunks:
+ *
+ *     char buf[64];
+ *     int len = snprintf(buf, sizeof buf, "FPS: %d", fps);
+ *     TextN(buf, len, .textColor = Color(200, 200, 200, 255),
+ *                     .fontSize = 12);
+ *
+ *     // Or from a slice of a larger string
+ *     TextN(user.name, user.name_len,
+ *           .textColor = Color(255, 255, 255, 255), .fontSize = 16);
+ *
+ * Clay does NOT copy the chars — the pointer must remain valid at
+ * least until Clay_EndLayout() (i.e. until CC_End() returns). Stack
+ * buffers inside the current frame's BuildUI() are fine; pointers to
+ * freed memory are not.
+ */
+
+/* String-literal text. Compile-time length via sizeof. */
+static inline Clay_TextElementConfig
+CC__TextStyleWithGlobalFont(Clay_TextElementConfig style) {
+  if (style.fontId == 0) {
+    int global_font = CC_GetGlobalFontId();
+    style.fontId = (uint16_t)((global_font >= 0) ? global_font : 0);
+  }
+  return style;
+}
+
+/* String-literal text. Compile-time length via sizeof. */
+#define Text(literal_str, ...)                                                 \
+  Clay__OpenTextElement(CLAY_STRING(literal_str),                              \
+                        CC__TextStyleWithGlobalFont(                           \
+                            (Clay_TextElementConfig){__VA_ARGS__}))
+
+/* Dynamic-length text. You supply the pointer and length. */
+#define TextN(chars_expr, length_expr, ...)                                    \
+  Clay__OpenTextElement((Clay_String){.isStaticallyAllocated = false,          \
+                                      .length = (int32_t)(length_expr),        \
+                                      .chars = (chars_expr)},                  \
+                        CC__TextStyleWithGlobalFont(                           \
+                            (Clay_TextElementConfig){__VA_ARGS__}))
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* CCOMPOSE_H */
