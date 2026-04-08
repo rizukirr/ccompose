@@ -4,9 +4,8 @@ Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building im
 
 ## Demo Video
 
-<video src="assets/demo.mp4" controls width="960"></video>
+https://github.com/user-attachments/assets/d81e628b-dc51-41b5-b5ed-47d669926afa
 
-[Download demo video](assets/demo.mp4)
 
 ## Requirements
 
