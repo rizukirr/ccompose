@@ -2,6 +2,8 @@
 
 Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building immediate-mode UI layouts, with optional raylib rendering support and Jetpack Compose like syntax.
 
+![demo](assets/ss.png)
+
 ## Demo Video
 
 https://github.com/user-attachments/assets/d81e628b-dc51-41b5-b5ed-47d669926afa

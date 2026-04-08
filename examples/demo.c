@@ -106,8 +106,9 @@ int main(void) {
             "examples/resources/Roboto-Regular.ttf", global_font_id);
   }
   if (global_font_id < 0) {
-    fprintf(stderr,
-            "ccompose demo: global font load failed, using default font (id=0)\n");
+    fprintf(
+        stderr,
+        "ccompose demo: global font load failed, using default font (id=0)\n");
   }
 
   while (CC_Running()) {
