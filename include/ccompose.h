@@ -46,7 +46,7 @@
  *   Column("id", .field = value, ...) { children }
  *
  * expands to a `for` loop that runs exactly once. On entry it opens a
- * Clay element, configures it with the `Clay_ElementDeclaration` literal
+ * Clay element, configures it with the `CC_ElementDeclaration` literal
  * you wrote, and runs the block. On exit it closes the element. Every
  * nested Column/Row/Box/Text inside the block becomes a child of that
  * element. No hidden tree — Clay holds the layout state in its arena.
@@ -101,21 +101,53 @@ extern "C" {
  *
  *     CC_RenderCommandArray commands = CC_End();
  *     for (int32_t i = 0; i < commands.length; ++i) {
- *         CC_RenderCommand *cmd = Clay_RenderCommandArray_Get(&commands, i);
+ *         CC_RenderCommand *cmd = CC_RenderCommandArray_Get(&commands, i);
  *         // cmd->commandType is one of CLAY_RENDER_COMMAND_TYPE_*
  *     }
  */
 
-typedef Clay_ElementDeclaration CC_Decl;     /* element config struct       */
-typedef Clay_TextElementConfig CC_TextStyle; /* text config struct         */
-typedef Clay_RenderCommandArray CC_RenderCommandArray; /* what CC_End returns*/
-typedef Clay_RenderCommand CC_RenderCommand;           /* one command entry */
-typedef Clay_ErrorData CC_ErrorData;                   /* error callback data*/
-typedef Clay_ElementId CC_ElementId;                   /* hashed element id */
-typedef Clay_Dimensions CC_Dimensions;                 /* {width, height}   */
-typedef Clay_Vector2 CC_Vector2;                       /* {x, y} floats     */
-typedef Clay_Color CC_Color;                           /* {r, g, b, a} 0–255*/
-typedef Clay_String CC_String;                         /* {chars, length}   */
+/* Each CC_ name below is a plain `#define` onto the matching Clay_
+ * symbol, so the two spellings are interchangeable everywhere — in
+ * declarations, casts, designated initializers, sizeof, etc. */
+
+/* Short legacy aliases. */
+#define CC_Decl Clay_ElementDeclaration     /* element config struct */
+#define CC_TextStyle Clay_TextElementConfig /* text config struct    */
+
+/* Element / layout types. */
+#define CC_ElementDeclaration Clay_ElementDeclaration
+#define CC_LayoutConfig Clay_LayoutConfig
+#define CC_LayoutDirection Clay_LayoutDirection
+#define CC_Sizing Clay_Sizing
+#define CC_Padding Clay_Padding
+#define CC_CornerRadius Clay_CornerRadius
+#define CC_ChildAlignment Clay_ChildAlignment
+
+/* Per-feature config structs (the designated-initializer fields on
+ * CC_ElementDeclaration). */
+#define CC_ImageElementConfig Clay_ImageElementConfig
+#define CC_FloatingElementConfig Clay_FloatingElementConfig
+#define CC_ClipElementConfig Clay_ClipElementConfig
+#define CC_AspectRatioElementConfig Clay_AspectRatioElementConfig
+#define CC_BorderElementConfig Clay_BorderElementConfig
+#define CC_CustomElementConfig Clay_CustomElementConfig
+#define CC_TextElementConfig Clay_TextElementConfig
+
+/* Primitive / value types. */
+#define CC_Color Clay_Color           /* {r, g, b, a} 0–255 */
+#define CC_String Clay_String         /* {chars, length}    */
+#define CC_Dimensions Clay_Dimensions /* {width, height}    */
+#define CC_Vector2 Clay_Vector2       /* {x, y} floats      */
+#define CC_ElementId Clay_ElementId   /* hashed element id  */
+#define CC_ErrorData Clay_ErrorData   /* error callback data*/
+
+/* Render command types returned by CC_End(). */
+#define CC_RenderCommand Clay_RenderCommand
+#define CC_RenderCommandArray Clay_RenderCommandArray
+#define CC_RenderCommandArray_Get Clay_RenderCommandArray_Get
+
+/* Pointer / hit-test function used by CC_Hovered. */
+#define CC_PointerOver Clay_PointerOver
 
 /* =========================================================================
  * Sugar — sizing, padding, color, alignment
@@ -128,7 +160,7 @@ typedef Clay_String CC_String;                         /* {chars, length}   */
 
 /* ------- Sizing ---------------------------------------------------------
  *
- * Used as the `.width` / `.height` of a `Clay_Sizing`, e.g.
+ * Used as the `.width` / `.height` of a `CC_Sizing`, e.g.
  *
  *     .layout = { .sizing = { Grow(), Fixed(240) } }
  *
@@ -155,7 +187,7 @@ typedef Clay_String CC_String;                         /* {chars, length}   */
 
 /* ------- Padding --------------------------------------------------------
  *
- * Used as the `.padding` of a `Clay_LayoutConfig`.
+ * Used as the `.padding` of a `CC_LayoutConfig`.
  *
  *   PadAll(n)            — n pixels on all four sides.
  *   Pad(l, r, t, b)      — per-side padding, in (left, right, top, bottom)
@@ -165,28 +197,27 @@ typedef Clay_String CC_String;                         /* {chars, length}   */
  * available space for children, it does not grow the box.
  */
 #define PadAll(n) CLAY_PADDING_ALL(n)
-#define Pad(l, r, t, b) ((Clay_Padding){(l), (r), (t), (b)})
+#define Pad(l, r, t, b) ((CC_Padding){(l), (r), (t), (b)})
 
 /* ------- Color & rounding ----------------------------------------------
  *
- *   Color(r, g, b, a)    — a Clay_Color literal. Channels are 0–255,
+ *   Color(r, g, b, a)    — a CC_Color literal. Channels are 0–255,
  *                          alpha included. Example:
  *                              .backgroundColor = Color(24, 24, 24, 255)
  *
- *   RadiusAll(n)         — a Clay_CornerRadius with all four corners = n.
+ *   RadiusAll(n)         — a CC_CornerRadius with all four corners = n.
  *                          Use large values (e.g. 999) for a pill/circle.
  *                          For per-corner control write the literal by
  *                          hand:
- *                              .cornerRadius = (Clay_CornerRadius){
+ *                              .cornerRadius = (CC_CornerRadius){
  *                                  .topLeft = 8, .topRight = 8 }
  */
-#define CC_Color Clay_Color
 #define RadiusAll(n) CLAY_CORNER_RADIUS(n)
-#define Color(r, g, b, a) ((Clay_Color){(r), (g), (b), (a)})
+#define Color(r, g, b, a) ((CC_Color){(r), (g), (b), (a)})
 
 /* ------- Child alignment ------------------------------------------------
  *
- * Used as the `.childAlignment` of a Clay_LayoutConfig, e.g.
+ * Used as the `.childAlignment` of a CC_LayoutConfig, e.g.
  *
  *     .layout = { .childAlignment = { .x = AlignCenter(),
  *                                     .y = AlignMiddle() } }
@@ -240,8 +271,8 @@ typedef Clay_String CC_String;                         /* {chars, length}   */
  * context exists, its setters just mutate its state:
  *
  *     Clay_SetMeasureTextFunction(my_measure, my_user_data);
- *     Clay_SetLayoutDimensions((Clay_Dimensions){w, h});
- *     Clay_SetPointerState((Clay_Vector2){mx, my}, down);
+ *     Clay_SetLayoutDimensions((CC_Dimensions){w, h});
+ *     Clay_SetPointerState((CC_Vector2){mx, my}, down);
  *     Clay_SetMaxElementCount(16384);   // note: affects next reset only
  *
  * For custom fonts, use CC_LoadFont() which returns a fontId you pass
@@ -267,7 +298,7 @@ void CC_SetWindowFlags(unsigned int raylib_flags);
 
 /* Set the background color used by CC_End() (via ClearBackground). The
  * color applies on every subsequent frame — call again to change it. */
-void CC_SetBackground(Clay_Color color);
+void CC_SetBackground(CC_Color color);
 
 /* Install a custom Clay error handler. If unset, ccompose prints error
  * text to stderr. Must be called BEFORE CC_Init(); Clay bakes the
@@ -393,7 +424,7 @@ void CC_SetViewport(float width, float height);
  *
  * The first argument is a **string literal** ID. Pass "" for anonymous
  * elements — Clay still generates an internal ID for layout bookkeeping,
- * but you can't target it from Clay_OnHover, Clay_PointerOver,
+ * but you can't target it from Clay_OnHover, CC_PointerOver,
  * scroll-offset persistence, or floating .parentId anchoring. Use a
  * real ID when you need any of those features, "" when you don't.
  *
@@ -402,36 +433,36 @@ void CC_SetViewport(float width, float height);
  * an int, or anything else and you'll get a compile error right at the
  * call site.
  *
- * The remaining arguments are `Clay_ElementDeclaration` designated
+ * The remaining arguments are `CC_ElementDeclaration` designated
  * initializers. **Every Clay field is available** — ccompose doesn't
  * wrap or rename anything:
  *
- *     .layout           — Clay_LayoutConfig: sizing, padding, gap,
+ *     .layout           — CC_LayoutConfig: sizing, padding, gap,
  *                         alignment, layoutDirection (overwritten by
  *                         Column/Row/Box to guarantee the direction).
- *     .backgroundColor  — Clay_Color. If you also set .image, this acts
+ *     .backgroundColor  — CC_Color. If you also set .image, this acts
  *                         as a tint on the image.
  *     .overlayColor     — color blended over the element and its
  *                         children ("mix" in GLSL terms).
- *     .cornerRadius     — Clay_CornerRadius (use RadiusAll(n) for a
+ *     .cornerRadius     — CC_CornerRadius (use RadiusAll(n) for a
  *                         uniform radius, or build by hand for per-
  *                         corner control).
- *     .image            — Clay_ImageElementConfig, a .imageData void*
+ *     .image            — CC_ImageElementConfig, a .imageData void*
  *                         passed to the renderer (Texture2D* for the
  *                         raylib backend). Turns the element into an
  *                         IMAGE render command.
- *     .floating         — Clay_FloatingElementConfig: takes the element
+ *     .floating         — CC_FloatingElementConfig: takes the element
  *                         out of normal flow, positions it relative to
  *                         a parent / the root / a specific ID, with a
  *                         zIndex and optional attachPoints.
- *     .clip             — Clay_ClipElementConfig: .horizontal/.vertical
+ *     .clip             — CC_ClipElementConfig: .horizontal/.vertical
  *                         booleans + .childOffset Vector2 to make the
  *                         element a scroll viewport.
- *     .aspectRatio      — Clay_AspectRatioElementConfig: width/height
+ *     .aspectRatio      — CC_AspectRatioElementConfig: width/height
  *                         ratio as a single float.
- *     .border           — Clay_BorderElementConfig: color + per-side
+ *     .border           — CC_BorderElementConfig: color + per-side
  *                         pixel widths.
- *     .custom           — Clay_CustomElementConfig: .customData void*
+ *     .custom           — CC_CustomElementConfig: .customData void*
  *                         that becomes a CUSTOM render command the
  *                         renderer can draw however it wants.
  *     .userData         — arbitrary void* forwarded to every render
@@ -499,8 +530,8 @@ typedef struct {
  * call this directly — it's the runtime hook the Column/Row/Box macros
  * expand into. */
 CC_Scope CC_OpenElement(const char *id_chars, int32_t id_len,
-                        Clay_LayoutDirection direction,
-                        Clay_ElementDeclaration decl);
+                        CC_LayoutDirection direction,
+                        CC_ElementDeclaration decl);
 
 /* Closes the element opened by CC_OpenElement. Idempotent: only closes
  * once per scope, subsequent calls are no-ops. */
@@ -521,7 +552,7 @@ void CC_CloseScope(CC_Scope *scope);
 #define CC_ELEMENT_IMPL_(scope, direction, id_literal, ...)                    \
   for (CC_Scope scope = CC_OpenElement(                                        \
            "" id_literal "", (int32_t)(sizeof("" id_literal "") - 1),          \
-           (direction), (Clay_ElementDeclaration){__VA_ARGS__});               \
+           (direction), (CC_ElementDeclaration){__VA_ARGS__});                 \
        scope.active; CC_CloseScope(&scope))
 
 /* Element — the generic container. Use when you need to pick the
@@ -617,7 +648,7 @@ void CC_CloseScope(CC_Scope *scope);
  * =========================================================================
  *
  * Leaf element — not a scoped block. Text() takes a **string literal**
- * and a `Clay_TextElementConfig` literal with the text style:
+ * and a `CC_TextElementConfig` literal with the text style:
  *
  *     Text("Hello, world!",
  *          .textColor     = Color(255, 255, 255, 255),
@@ -628,7 +659,7 @@ void CC_CloseScope(CC_Scope *scope);
  *          .wrapMode      = CLAY_TEXT_WRAP_WORDS,    // default
  *          .textAlignment = CLAY_TEXT_ALIGN_LEFT);   // default
  *
- * See include/clay.h for the full Clay_TextElementConfig field list.
+ * See include/clay.h for the full CC_TextElementConfig field list.
  *
  * Clay needs a measure function to know how wide text will render.
  * ccompose installs raylib's Raylib_MeasureText by default, so out of
@@ -670,8 +701,8 @@ void CC_CloseScope(CC_Scope *scope);
  */
 
 /* String-literal text. Compile-time length via sizeof. */
-static inline Clay_TextElementConfig
-CC__TextStyleWithGlobalFont(Clay_TextElementConfig style) {
+static inline CC_TextElementConfig
+CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
   if (style.fontId == 0) {
     int global_font = CC_GetGlobalFontId();
     style.fontId = (uint16_t)((global_font >= 0) ? global_font : 0);
@@ -683,15 +714,15 @@ CC__TextStyleWithGlobalFont(Clay_TextElementConfig style) {
 #define Text(literal_str, ...)                                                 \
   Clay__OpenTextElement(                                                       \
       CLAY_STRING(literal_str),                                                \
-      CC__TextStyleWithGlobalFont((Clay_TextElementConfig){__VA_ARGS__}))
+      CC__TextStyleWithGlobalFont((CC_TextElementConfig){__VA_ARGS__}))
 
 /* Dynamic-length text. You supply the pointer and length. */
 #define TextN(chars_expr, length_expr, ...)                                    \
   Clay__OpenTextElement(                                                       \
-      (Clay_String){.isStaticallyAllocated = false,                            \
-                    .length = (int32_t)(length_expr),                          \
-                    .chars = (chars_expr)},                                    \
-      CC__TextStyleWithGlobalFont((Clay_TextElementConfig){__VA_ARGS__}))
+      (CC_String){.isStaticallyAllocated = false,                              \
+                  .length = (int32_t)(length_expr),                            \
+                  .chars = (chars_expr)},                                      \
+      CC__TextStyleWithGlobalFont((CC_TextElementConfig){__VA_ARGS__}))
 
 /* =========================================================================
  * Button + pointer interaction
@@ -734,7 +765,7 @@ CC__TextStyleWithGlobalFont(Clay_TextElementConfig style) {
  * The id passed to Button / CC_Hovered / CC_Clicked **must be a string
  * literal** — it is hashed at compile time via CLAY_ID. For runtime
  * ids (e.g. list rows with per-item indices), use Row/Box +
- * Clay_PointerOver(CLAY_IDI("row", i)) directly.
+ * CC_PointerOver(CLAY_IDI("row", i)) directly.
  *
  * In headless mode (CCOMPOSE_NO_BACKEND) there is no input source, so
  * CC__MousePressedThisFrame() returns false and CC_Clicked() is
@@ -750,8 +781,8 @@ CC__TextStyleWithGlobalFont(Clay_TextElementConfig style) {
 bool CC__MousePressedThisFrame(void);
 
 /* True while the cursor is over the element with the given string-
- * literal id. Thin wrapper around Clay_PointerOver(CLAY_ID(id)). */
-#define CC_Hovered(id_literal) Clay_PointerOver(CLAY_ID(id_literal))
+ * literal id. Thin wrapper around CC_PointerOver(CLAY_ID(id)). */
+#define CC_Hovered(id_literal) CC_PointerOver(CLAY_ID(id_literal))
 
 /* True on the single frame the user clicks (left mouse press) while
  * hovering the element with the given id. Short-circuits on the mouse
@@ -760,7 +791,7 @@ bool CC__MousePressedThisFrame(void);
   (CC__MousePressedThisFrame() && CC_Hovered(id_literal))
 
 /* Button — scoped block for clickable elements. Identical expansion to
- * Row: CLAY_LEFT_TO_RIGHT children, every Clay_ElementDeclaration
+ * Row: CLAY_LEFT_TO_RIGHT children, every CC_ElementDeclaration
  * field available, no hidden behavior. Give it a non-empty string
  * literal id so CC_Hovered / CC_Clicked have something to target;
  * with id == "" it degrades to a plain LTR element. */
