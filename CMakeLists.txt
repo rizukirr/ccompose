@@ -45,6 +45,30 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
 endif()
 
 if(CCOMPOSE_BACKEND_RAYLIB)
+    # Try to locate raylib via its CMake package config (provided by vcpkg,
+    # Homebrew, distro packages, or a source build's install tree). If it
+    # isn't found, fall back to fetching and building it from source so the
+    # project builds out of the box on fresh machines.
+    set(CCOMPOSE_RAYLIB_VERSION "5.5" CACHE STRING
+        "raylib version to fetch when find_package(raylib) fails")
+
+    find_package(raylib ${CCOMPOSE_RAYLIB_VERSION} CONFIG QUIET)
+    if(NOT raylib_FOUND)
+        message(STATUS
+            "raylib not found via find_package; fetching ${CCOMPOSE_RAYLIB_VERSION} from GitHub")
+        include(FetchContent)
+        # Keep raylib's own examples/games out of our build.
+        set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            raylib
+            GIT_REPOSITORY https://github.com/raysan5/raylib.git
+            GIT_TAG        ${CCOMPOSE_RAYLIB_VERSION}
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_MakeAvailable(raylib)
+    endif()
+
     # The bundled raylib renderer lives at renderer/raylib/. We expose that
     # directory PUBLICly so consumers that #include "ccompose.h" pick up
     # the vendored raylib.h too (ccompose.h #include "raylib.h").
@@ -52,7 +76,7 @@ if(CCOMPOSE_BACKEND_RAYLIB)
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/renderer/raylib>
     )
 
-    # Link system raylib + libm (Clay uses math functions).
+    # Link raylib + libm (Clay uses math functions; libm is implicit on Windows).
     if(NOT WIN32)
         target_link_libraries(ccompose PUBLIC raylib m)
     else()
