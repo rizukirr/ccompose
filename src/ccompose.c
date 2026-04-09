@@ -146,6 +146,10 @@ static void cc__backend_shutdown(void) {
 
 bool CC_Running(void) { return !WindowShouldClose(); }
 
+bool CC__MousePressedThisFrame(void) {
+  return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+}
+
 #else /* CCOMPOSE_NO_BACKEND */
 
 void CC_SetWindow(int width, int height, const char *title) {
@@ -167,6 +171,7 @@ int CC_LoadGlobalFont(const char *path, int base_size) {
 }
 int CC_GetGlobalFontId(void) { return 0; }
 bool CC_Running(void) { return true; }
+bool CC__MousePressedThisFrame(void) { return false; }
 
 static Clay_Dimensions cc__default_measure_text(Clay_StringSlice text,
                                                 Clay_TextElementConfig *config,

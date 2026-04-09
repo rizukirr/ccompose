@@ -52,7 +52,21 @@ int main(void) {
             .backgroundColor = Color(255, 0, 0, 255),
             .cornerRadius    = RadiusAll(999)) {
         }
+        /* Button — same shape as Row. In headless mode CC_Clicked()
+         * must always be false (no mouse input source), and CC_Hovered
+         * should compile + be queryable. */
+        Button("Save",
+               .layout = { .padding = PadAll(4) },
+               .backgroundColor = Color(40, 100, 200, 255),
+               .cornerRadius    = RadiusAll(4)) {
+            Text("Save",
+                 .textColor = Color(255, 255, 255, 255),
+                 .fontSize  = 12);
+        }
     }
+    /* Headless invariants for the interaction helpers. */
+    assert(!CC_Clicked("Save") && "CC_Clicked must be false in headless mode");
+    (void)CC_Hovered("Save"); /* just ensure it compiles + links */
     CC_RenderCommandArray commands = CC_End();
 
     int rect_count = 0;
@@ -66,7 +80,7 @@ int main(void) {
 
     assert(!saw_error && "clay reported an error during layout");
     assert(rect_count >= 1 && "expected at least one RECTANGLE render command");
-    assert(text_count == 3 && "expected exactly three TEXT render commands");
+    assert(text_count == 4 && "expected exactly four TEXT render commands");
 
     CC_Shutdown();
 

@@ -180,6 +180,7 @@ typedef Clay_String CC_String;                         /* {chars, length}   */
  *                              .cornerRadius = (Clay_CornerRadius){
  *                                  .topLeft = 8, .topRight = 8 }
  */
+#define CC_Color Clay_Color
 #define RadiusAll(n) CLAY_CORNER_RADIUS(n)
 #define Color(r, g, b, a) ((Clay_Color){(r), (g), (b), (a)})
 
@@ -680,17 +681,91 @@ CC__TextStyleWithGlobalFont(Clay_TextElementConfig style) {
 
 /* String-literal text. Compile-time length via sizeof. */
 #define Text(literal_str, ...)                                                 \
-  Clay__OpenTextElement(CLAY_STRING(literal_str),                              \
-                        CC__TextStyleWithGlobalFont(                           \
-                            (Clay_TextElementConfig){__VA_ARGS__}))
+  Clay__OpenTextElement(                                                       \
+      CLAY_STRING(literal_str),                                                \
+      CC__TextStyleWithGlobalFont((Clay_TextElementConfig){__VA_ARGS__}))
 
 /* Dynamic-length text. You supply the pointer and length. */
 #define TextN(chars_expr, length_expr, ...)                                    \
-  Clay__OpenTextElement((Clay_String){.isStaticallyAllocated = false,          \
-                                      .length = (int32_t)(length_expr),        \
-                                      .chars = (chars_expr)},                  \
-                        CC__TextStyleWithGlobalFont(                           \
-                            (Clay_TextElementConfig){__VA_ARGS__}))
+  Clay__OpenTextElement(                                                       \
+      (Clay_String){.isStaticallyAllocated = false,                            \
+                    .length = (int32_t)(length_expr),                          \
+                    .chars = (chars_expr)},                                    \
+      CC__TextStyleWithGlobalFont((Clay_TextElementConfig){__VA_ARGS__}))
+
+/* =========================================================================
+ * Button + pointer interaction
+ * =========================================================================
+ *
+ * Clay tracks pointer state against the previous frame's layout —
+ * ccompose feeds it from inside CC_Begin(). Three pieces sit on top:
+ *
+ *   CC_Hovered("id")   — true while the mouse is over the element.
+ *   CC_Clicked("id")   — true on the frame the left mouse button was
+ *                        pressed while hovering that element.
+ *   Button("id", ...)  — scoped block, same shape as Row/Column/Box,
+ *                        opens a CLAY_LEFT_TO_RIGHT element. No
+ *                        injected styling, no implicit hover
+ *                        behavior — a semantic alias that pairs with
+ *                        CC_Hovered / CC_Clicked in the IMGUI idiom.
+ *
+ * Typical pattern:
+ *
+ *     if (CC_Clicked("Save")) save_file();
+ *
+ *     Button("Save",
+ *            .layout = { .padding        = PadAll(12),
+ *                        .childAlignment = { .x = AlignCenter(),
+ *                                            .y = AlignMiddle() } },
+ *            .backgroundColor = CC_Hovered("Save")
+ *                                   ? Color( 80, 140, 220, 255)
+ *                                   : Color( 40, 100, 200, 255),
+ *            .cornerRadius    = RadiusAll(8)) {
+ *         Text("Save",
+ *              .textColor = Color(255, 255, 255, 255),
+ *              .fontSize  = 16);
+ *     }
+ *
+ * CC_Clicked / CC_Hovered can be queried before or after the Button
+ * block in the same frame. The first frame a button becomes visible it
+ * will not register a hover until the next CC_Begin tick, because
+ * Clay's pointer check runs against the previous frame's layout.
+ *
+ * The id passed to Button / CC_Hovered / CC_Clicked **must be a string
+ * literal** — it is hashed at compile time via CLAY_ID. For runtime
+ * ids (e.g. list rows with per-item indices), use Row/Box +
+ * Clay_PointerOver(CLAY_IDI("row", i)) directly.
+ *
+ * In headless mode (CCOMPOSE_NO_BACKEND) there is no input source, so
+ * CC__MousePressedThisFrame() returns false and CC_Clicked() is
+ * always false. CC_Hovered() still works against whatever pointer
+ * state you push via Clay_SetPointerState(), which is useful in tests.
+ */
+
+/* Internal — returns true on the frame the primary mouse button
+ * transitioned from up to down. Backed by IsMouseButtonPressed() with
+ * the raylib backend, always false in headless mode. Exposed only so
+ * the CC_Clicked macro can reference it; prefer CC_Clicked in user
+ * code. */
+bool CC__MousePressedThisFrame(void);
+
+/* True while the cursor is over the element with the given string-
+ * literal id. Thin wrapper around Clay_PointerOver(CLAY_ID(id)). */
+#define CC_Hovered(id_literal) Clay_PointerOver(CLAY_ID(id_literal))
+
+/* True on the single frame the user clicks (left mouse press) while
+ * hovering the element with the given id. Short-circuits on the mouse
+ * check so the Clay id hash is only computed on press frames. */
+#define CC_Clicked(id_literal)                                                 \
+  (CC__MousePressedThisFrame() && CC_Hovered(id_literal))
+
+/* Button — scoped block for clickable elements. Identical expansion to
+ * Row: CLAY_LEFT_TO_RIGHT children, every Clay_ElementDeclaration
+ * field available, no hidden behavior. Give it a non-empty string
+ * literal id so CC_Hovered / CC_Clicked have something to target;
+ * with id == "" it degrades to a plain LTR element. */
+#define Button(id_literal, ...)                                                \
+  Element(CLAY_LEFT_TO_RIGHT, id_literal, __VA_ARGS__)
 
 #ifdef __cplusplus
 }
