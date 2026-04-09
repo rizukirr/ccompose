@@ -128,3 +128,7 @@ Skips the raylib backend and the demo target — useful for CI or environments w
 cmake -S . -B build -DCCOMPOSE_BACKEND_RAYLIB=OFF
 cmake --build build
 ```
+
+## Support
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/rizukirr)
