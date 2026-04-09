@@ -169,7 +169,7 @@ static void BuildUI(void) {
 
 int main(void) {
   CC_SetWindow(960, 640, "ccompose + Clay + raylib");
-  CC_SetBackground((Clay_Color){0, 0, 0, 255});
+  CC_SetBackground((CC_Color){0, 0, 0, 255});
   CC_Init();
 
   int global_font_id =

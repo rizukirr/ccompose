@@ -11,6 +11,54 @@ Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building im
 
 https://github.com/user-attachments/assets/d81e628b-dc51-41b5-b5ed-47d669926afa
 
+## Example
+
+```c
+#include "ccompose.h"
+
+int main(void) {
+    CC_SetWindow(480, 320, "hi");
+    CC_Init();
+
+    bool quit = false;
+    while (CC_Running() && !quit) {
+        CC_Begin();
+
+        Column("Root",
+               .layout = { .sizing = { Grow(), Grow() },
+                           .padding = PadAll(24),
+                           .childGap = 12,
+                           .childAlignment = { .x = AlignCenter(),
+                                               .y = AlignMiddle() } },
+               .backgroundColor = Color(18, 18, 20, 255)) {
+
+            Text("Hello, ccompose!",
+                 .textColor = Color(236, 236, 236, 255),
+                 .fontSize  = 28);
+
+            if (CC_Clicked("Quit")) quit = true;
+            Button("Quit",
+                   .layout = { .padding = PadAll(12) },
+                   .backgroundColor = CC_Hovered("Quit")
+                                          ? Color( 80, 140, 220, 255)
+                                          : Color( 40, 100, 200, 255),
+                   .cornerRadius = RadiusAll(6)) {
+                Text("Quit",
+                     .textColor = Color(255, 255, 255, 255),
+                     .fontSize  = 16);
+            }
+        }
+
+        CC_End();
+    }
+
+    CC_Shutdown();
+    return 0;
+}
+```
+
+See the [wiki](https://github.com/rizukirr/ccompose/wiki) for full API docs,
+more examples, and the Clay field reference.
 
 ## Requirements
 
