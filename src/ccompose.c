@@ -84,7 +84,7 @@ void CC_SetWindowFlags(unsigned int raylib_flags) {
   cc__window_flags = raylib_flags;
 }
 
-void CC_SetBackground(Clay_Color color) { cc__background_color = color; }
+void CC_SetBackground(CC_Color color) { cc__background_color = color; }
 
 int CC_LoadGlobalFont(const char *path, int base_size) {
   if (!cc__initialized || cc__font_count >= CC_MAX_FONTS)

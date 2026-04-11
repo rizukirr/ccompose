@@ -205,6 +205,15 @@ extern "C" {
  *                          alpha included. Example:
  *                              .backgroundColor = Color(24, 24, 24, 255)
  *
+ *   ColorHex(rgb)        — a CC_Color from a 0xRRGGBB hex literal, with
+ *                          alpha forced to 255 (fully opaque). Example:
+ *                              .backgroundColor = ColorHex(0x1E1E22)
+ *
+ *   ColorHexA(rgba)      — a CC_Color from a 0xRRGGBBAA hex literal that
+ *                          includes the alpha channel in the bottom byte.
+ *                          Example:
+ *                              .overlayColor = ColorHexA(0x00000020)
+ *
  *   RadiusAll(n)         — a CC_CornerRadius with all four corners = n.
  *                          Use large values (e.g. 999) for a pill/circle.
  *                          For per-corner control write the literal by
@@ -214,6 +223,15 @@ extern "C" {
  */
 #define RadiusAll(n) CLAY_CORNER_RADIUS(n)
 #define Color(r, g, b, a) ((CC_Color){(r), (g), (b), (a)})
+#define ColorHex(rgb)                                                          \
+  ((CC_Color){(float)(((uint32_t)(rgb) >> 16) & 0xFFu),                        \
+              (float)(((uint32_t)(rgb) >> 8) & 0xFFu),                         \
+              (float)((uint32_t)(rgb) & 0xFFu), 255.0f})
+#define ColorHexA(rgba)                                                        \
+  ((CC_Color){(float)(((uint32_t)(rgba) >> 24) & 0xFFu),                       \
+              (float)(((uint32_t)(rgba) >> 16) & 0xFFu),                       \
+              (float)(((uint32_t)(rgba) >> 8) & 0xFFu),                        \
+              (float)((uint32_t)(rgba) & 0xFFu)})
 
 /* ------- Child alignment ------------------------------------------------
  *
