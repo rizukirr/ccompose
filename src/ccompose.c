@@ -49,6 +49,23 @@ static Font cc__fonts[CC_MAX_FONTS];
 static int cc__font_count = 0;
 static int cc__font_global_id = 0;
 
+/* Per-frame pool of CC_ImageRef slots. ImgFill/Fit/Crop hand out slots
+ * from this pool so the pointer they return outlives the call-site
+ * block scope that a compound literal would give them. Reset by
+ * CC_Begin() at the top of every frame. */
+#define CC_IMAGE_REF_POOL_SIZE 128
+static CC_ImageRef cc__image_ref_pool[CC_IMAGE_REF_POOL_SIZE];
+static int cc__image_ref_pool_used = 0;
+
+CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale) {
+  if (cc__image_ref_pool_used >= CC_IMAGE_REF_POOL_SIZE)
+    return NULL;
+  CC_ImageRef *r = &cc__image_ref_pool[cc__image_ref_pool_used++];
+  r->texture = texture;
+  r->scale = scale;
+  return r;
+}
+
 static int cc__window_width = 800;
 static int cc__window_height = 600;
 static const char *cc__window_title = "ccompose";
@@ -97,6 +114,10 @@ int CC_LoadFont(const char *path, int base_size) {
   cc__fonts[cc__font_count] = f;
   return cc__font_count++;
 }
+
+Texture2D CC_LoadImage(const char *path) { return LoadTexture(path); }
+
+void CC_UnloadImage(Texture2D texture) { UnloadTexture(texture); }
 
 static void cc__backend_init(void) {
   Clay_Raylib_Initialize(cc__window_width, cc__window_height, cc__window_title,
@@ -249,6 +270,7 @@ void CC_Begin(void) {
   if (!cc__initialized)
     CC_Init();
 #ifndef CCOMPOSE_NO_BACKEND
+  cc__image_ref_pool_used = 0;
   cc__backend_begin_frame();
 #endif
   Clay_BeginLayout();

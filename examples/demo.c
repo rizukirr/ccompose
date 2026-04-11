@@ -9,6 +9,7 @@
  */
 
 #include "../include/ccompose.h"
+#include "raylib.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -21,7 +22,7 @@ static const CC_Color COLOR_TEXT = {236, 236, 236, 255};
 static const CC_Color COLOR_MUTED = {160, 160, 170, 255};
 static const CC_Color COLOR_TRANSPARENT = {0, 0, 0, 0};
 
-static void BuildUI(void) {
+static void BuildUI(Texture2D *avatar_tex) {
   static const char *current_page = "Home";
 
   while (CC_Running()) {
@@ -43,13 +44,9 @@ static void BuildUI(void) {
 
         /* Box used as a single-child decoration: a fixed-size circular
          * badge holding a single character of text. */
-        Box("HeaderBadge",
-            .layout = {.sizing = {Fixed(36), Fixed(36)},
-                       .childAlignment = {.x = CLAY_ALIGN_X_CENTER,
-                                          .y = CLAY_ALIGN_Y_CENTER}},
-            .backgroundColor = COLOR_ACCENT, .cornerRadius = RadiusAll(999)) {
-          Text("c", .textColor = (CC_Color){10, 10, 10, 255}, .fontSize = 22);
-        }
+        Image("Avatar", ImgCrop(avatar_tex),
+              .layout = {.sizing = {Fixed(50), Fixed(50)}},
+              .cornerRadius = RadiusAll(999));
 
         Column("HeaderText",
                .layout = {.sizing = {Grow(), Fit()}, .childGap = 4}) {
@@ -184,8 +181,11 @@ int main(void) {
         "ccompose demo: global font load failed, using default font (id=0)\n");
   }
 
-  BuildUI();
+  Texture2D avatar_tex = CC_LoadImage("examples/resources/profile.jpg");
 
+  BuildUI(&avatar_tex);
+
+  CC_UnloadImage(avatar_tex);
   CC_Shutdown();
   return 0;
 }

@@ -184,11 +184,127 @@ void Clay_Raylib_Initialize(int width, int height, const char *title, unsigned i
 static char *temp_render_buffer = NULL;
 static int temp_render_buffer_len = 0;
 
+/* --- CC_ImageRef shape (ccompose divergence from upstream Clay) ---
+ *
+ * ccompose's Image() macro wraps the raw Texture2D pointer in a small
+ * struct so it can carry a scale mode (FILL / FIT / CROP) alongside the
+ * texture. The renderer dereferences imageData as CC_ImageRef* instead
+ * of Texture2D*. When this file is #included from src/ccompose.c, the
+ * type already exists from ccompose.h — the guards avoid redefinition.
+ * When the renderer is built standalone by upstream consumers, these
+ * definitions provide the type locally. */
+#ifndef CC_IMAGE_REF_DEFINED_
+#define CC_IMAGE_REF_DEFINED_ 1
+typedef enum {
+    CC_IMAGE_FILL = 0,
+    CC_IMAGE_FIT,
+    CC_IMAGE_CROP,
+} CC_ImageScale;
+#endif
+
+#ifndef CC_IMAGE_REF_STRUCT_DEFINED_
+#define CC_IMAGE_REF_STRUCT_DEFINED_ 1
+typedef struct {
+    Texture2D *texture;
+    CC_ImageScale scale;
+} CC_ImageRef;
+#endif
+
+/* --- Rounded image cache (ccompose divergence from upstream Clay) ---
+ *
+ * Clay computes cornerRadius for IMAGE render commands and forwards it via
+ * Clay_ImageRenderData.cornerRadius, but upstream's raylib renderer ignores
+ * that field and always draws images into a square bounding box. This block
+ * adds a small RenderTexture2D cache so images with cornerRadius > 0 render
+ * with rounded corners via a BLEND_MULTIPLIED mask pass:
+ *
+ *   1. Look up (or allocate) a RenderTexture2D matching the bounding box,
+ *      keyed on the Clay element id.
+ *   2. Clear the RT to transparent; draw a white DrawRectangleRounded at
+ *      full size — that's the alpha mask.
+ *   3. Switch to BLEND_MULTIPLIED and draw the source texture over the mask.
+ *      Where the mask is white the texture survives; where it's transparent
+ *      it multiplies to zero and disappears.
+ *   4. Blit the RT to the screen at the image's bounding box (with the Y
+ *      flip that GL framebuffers require).
+ *
+ * Entries are evicted if unused for >STALE_FRAMES, or when the table is
+ * full (oldest wins). Render textures are unloaded on eviction and on
+ * Clay_Raylib_Close(). */
+#define CC_ROUNDED_IMAGE_CACHE_SIZE 32
+#define CC_ROUNDED_IMAGE_STALE_FRAMES 120
+
+typedef struct {
+    uint32_t id;           // 0 = empty slot
+    int width;
+    int height;
+    RenderTexture2D rt;
+    uint32_t last_frame;
+} CC_RoundedImageCacheEntry;
+
+static CC_RoundedImageCacheEntry cc__rounded_image_cache[CC_ROUNDED_IMAGE_CACHE_SIZE];
+static uint32_t cc__rounded_image_frame = 0;
+
+static void cc__rounded_image_cache_free_all(void) {
+    for (int i = 0; i < CC_ROUNDED_IMAGE_CACHE_SIZE; ++i) {
+        if (cc__rounded_image_cache[i].id != 0) {
+            UnloadRenderTexture(cc__rounded_image_cache[i].rt);
+            cc__rounded_image_cache[i] = (CC_RoundedImageCacheEntry){0};
+        }
+    }
+}
+
+static void cc__rounded_image_cache_sweep(void) {
+    uint32_t now = cc__rounded_image_frame;
+    for (int i = 0; i < CC_ROUNDED_IMAGE_CACHE_SIZE; ++i) {
+        CC_RoundedImageCacheEntry *e = &cc__rounded_image_cache[i];
+        if (e->id != 0 && (now - e->last_frame) > CC_ROUNDED_IMAGE_STALE_FRAMES) {
+            UnloadRenderTexture(e->rt);
+            *e = (CC_RoundedImageCacheEntry){0};
+        }
+    }
+}
+
+static CC_RoundedImageCacheEntry *cc__rounded_image_cache_get(uint32_t id, int w, int h) {
+    if (id == 0) return NULL; // Can't cache anonymous elements stably.
+    int free_slot = -1;
+    int oldest_slot = 0;
+    uint32_t oldest_frame = UINT32_MAX;
+    for (int i = 0; i < CC_ROUNDED_IMAGE_CACHE_SIZE; ++i) {
+        CC_RoundedImageCacheEntry *e = &cc__rounded_image_cache[i];
+        if (e->id == id) {
+            if (e->width != w || e->height != h) {
+                UnloadRenderTexture(e->rt);
+                e->rt = LoadRenderTexture(w, h);
+                e->width = w;
+                e->height = h;
+            }
+            e->last_frame = cc__rounded_image_frame;
+            return e;
+        }
+        if (e->id == 0 && free_slot < 0) free_slot = i;
+        if (e->last_frame < oldest_frame) {
+            oldest_frame = e->last_frame;
+            oldest_slot = i;
+        }
+    }
+    int slot = (free_slot >= 0) ? free_slot : oldest_slot;
+    CC_RoundedImageCacheEntry *e = &cc__rounded_image_cache[slot];
+    if (e->id != 0) UnloadRenderTexture(e->rt);
+    e->id = id;
+    e->width = w;
+    e->height = h;
+    e->rt = LoadRenderTexture(w, h);
+    e->last_frame = cc__rounded_image_frame;
+    return e;
+}
+
 // Call after closing the window to clean up the render buffer
 void Clay_Raylib_Close()
 {
     if(temp_render_buffer) free(temp_render_buffer);
     temp_render_buffer_len = 0;
+    cc__rounded_image_cache_free_all();
 
     CloseWindow();
 }
@@ -196,6 +312,9 @@ void Clay_Raylib_Close()
 
 void Clay_Raylib_Render(Clay_RenderCommandArray renderCommands, Font* fonts)
 {
+    cc__rounded_image_frame++;
+    cc__rounded_image_cache_sweep();
+
     for (int j = 0; j < renderCommands.length; j++)
     {
         Clay_RenderCommand *renderCommand = Clay_RenderCommandArray_Get(&renderCommands, j);
@@ -223,18 +342,95 @@ void Clay_Raylib_Render(Clay_RenderCommandArray renderCommands, Font* fonts)
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
-                Texture2D imageTexture = *(Texture2D *)renderCommand->renderData.image.imageData;
-                Clay_Color tintColor = renderCommand->renderData.image.backgroundColor;
+                Clay_ImageRenderData *imgData = &renderCommand->renderData.image;
+                CC_ImageRef *ref = (CC_ImageRef *)imgData->imageData;
+                if (!ref || !ref->texture) break;
+                Texture2D imageTexture = *ref->texture;
+                Clay_Color tintColor = imgData->backgroundColor;
                 if (tintColor.r == 0 && tintColor.g == 0 && tintColor.b == 0 && tintColor.a == 0) {
                     tintColor = (Clay_Color) { 255, 255, 255, 255 };
                 }
-                DrawTexturePro(
-                    imageTexture,
-                    (Rectangle) { 0, 0, imageTexture.width, imageTexture.height },
-                    (Rectangle){boundingBox.x, boundingBox.y, boundingBox.width, boundingBox.height},
-                    (Vector2) {},
-                    0,
-                    CLAY_COLOR_TO_RAYLIB_COLOR(tintColor));
+
+                /* Compute src/dst rectangles per scale mode. */
+                float texW = (float)imageTexture.width;
+                float texH = (float)imageTexture.height;
+                float boxW = boundingBox.width;
+                float boxH = boundingBox.height;
+                Rectangle srcRect = { 0, 0, texW, texH };
+                Rectangle dstRect = { boundingBox.x, boundingBox.y, boxW, boxH };
+                if (texW > 0 && texH > 0 && boxW > 0 && boxH > 0) {
+                    float texAspect = texW / texH;
+                    float boxAspect = boxW / boxH;
+                    switch (ref->scale) {
+                        case CC_IMAGE_FIT: {
+                            if (texAspect > boxAspect) {
+                                /* Image wider than box → fit width, letterbox top/bottom. */
+                                float newH = boxW / texAspect;
+                                dstRect = (Rectangle){ boundingBox.x,
+                                                       boundingBox.y + (boxH - newH) * 0.5f,
+                                                       boxW, newH };
+                            } else {
+                                /* Image taller than box → fit height, pillarbox sides. */
+                                float newW = boxH * texAspect;
+                                dstRect = (Rectangle){ boundingBox.x + (boxW - newW) * 0.5f,
+                                                       boundingBox.y, newW, boxH };
+                            }
+                            break;
+                        }
+                        case CC_IMAGE_CROP: {
+                            if (texAspect > boxAspect) {
+                                /* Image wider than box → crop sides. */
+                                float effW = texH * boxAspect;
+                                srcRect = (Rectangle){ (texW - effW) * 0.5f, 0, effW, texH };
+                            } else {
+                                /* Image taller than box → crop top/bottom. */
+                                float effH = texW / boxAspect;
+                                srcRect = (Rectangle){ 0, (texH - effH) * 0.5f, texW, effH };
+                            }
+                            break;
+                        }
+                        case CC_IMAGE_FILL:
+                        default:
+                            break;
+                    }
+                }
+
+                /* Rounded path: render through a cached RT with a rounded-rect alpha mask. */
+                if (imgData->cornerRadius.topLeft > 0) {
+                    int w = (int)roundf(boundingBox.width);
+                    int h = (int)roundf(boundingBox.height);
+                    if (w > 0 && h > 0) {
+                        CC_RoundedImageCacheEntry *e =
+                            cc__rounded_image_cache_get(renderCommand->id, w, h);
+                        if (e) {
+                            float shorter = (w < h) ? (float)w : (float)h;
+                            float roundness = (imgData->cornerRadius.topLeft * 2.0f) / shorter;
+                            if (roundness > 1.0f) roundness = 1.0f;
+
+                            BeginTextureMode(e->rt);
+                                ClearBackground(BLANK);
+                                DrawRectangleRounded((Rectangle){ 0, 0, (float)w, (float)h },
+                                                     roundness, 16, WHITE);
+                                BeginBlendMode(BLEND_MULTIPLIED);
+                                    DrawTexturePro(imageTexture, srcRect,
+                                                   (Rectangle){ 0, 0, (float)w, (float)h },
+                                                   (Vector2){0}, 0,
+                                                   CLAY_COLOR_TO_RAYLIB_COLOR(tintColor));
+                                EndBlendMode();
+                            EndTextureMode();
+
+                            /* GL RTs are Y-flipped — negative src height un-flips. */
+                            Rectangle rtSrc = { 0, 0, (float)w, -(float)h };
+                            DrawTexturePro(e->rt.texture, rtSrc, dstRect,
+                                           (Vector2){0}, 0, WHITE);
+                            break;
+                        }
+                    }
+                }
+
+                /* Fast path: no corner radius, direct draw. */
+                DrawTexturePro(imageTexture, srcRect, dstRect, (Vector2){0}, 0,
+                               CLAY_COLOR_TO_RAYLIB_COLOR(tintColor));
                 break;
             }
             case CLAY_RENDER_COMMAND_TYPE_SCISSOR_START: {

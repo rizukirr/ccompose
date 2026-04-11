@@ -403,6 +403,41 @@ int CC_LoadGlobalFont(const char *path, int base_size);
  * Defaults to 0 (raylib default font). */
 int CC_GetGlobalFontId(void);
 
+#ifndef CCOMPOSE_NO_BACKEND
+/* Load an image file from disk and upload it to the GPU as a Texture2D
+ * that can be passed to the Image() macro. Thin wrapper over raylib's
+ * LoadTexture — supports PNG, JPG, BMP, TGA, GIF, QOI, and anything else
+ * raylib handles.
+ *
+ * Must be called AFTER CC_Init() so raylib has an active GL context.
+ * Call CC_UnloadImage() before CC_Shutdown() to release the GPU texture
+ * (or let process exit clean it up in throwaway programs).
+ *
+ * On failure raylib returns a zero-id Texture2D; check tex.id == 0 if
+ * you need to distinguish load errors from success.
+ *
+ * Example:
+ *
+ *     CC_Init();
+ *     Texture2D avatar = CC_LoadImage("resources/avatar.png");
+ *     while (CC_Running()) {
+ *         CC_Begin();
+ *         Image("Avatar", &avatar, .layout = {.sizing = {Fixed(64), Fixed(64)}});
+ *         CC_End();
+ *     }
+ *     CC_UnloadImage(avatar);
+ *     CC_Shutdown();
+ *
+ * Not available in headless mode (CCOMPOSE_NO_BACKEND) — Texture2D is a
+ * raylib type, so the declaration is compiled out entirely. */
+Texture2D CC_LoadImage(const char *path);
+
+/* Release a texture previously returned by CC_LoadImage(). Thin wrapper
+ * over UnloadTexture. Safe to call on a zero-id texture. Must be called
+ * before CC_Shutdown() while the GL context is still alive. */
+void CC_UnloadImage(Texture2D texture);
+#endif
+
 /* Set the Clay viewport for headless mode (CCOMPOSE_NO_BACKEND). When
  * the raylib backend is active this is effectively a no-op — CC_Begin
  * reads GetScreenWidth/GetScreenHeight every frame and overwrites
@@ -642,6 +677,106 @@ void CC_CloseScope(CC_Scope *scope);
  * there are 0–1 normal children or when all children are floating. */
 #define Box(id_literal, ...)                                                   \
   Element(CLAY_TOP_TO_BOTTOM, id_literal, __VA_ARGS__)
+
+/* =========================================================================
+ * Image
+ * =========================================================================
+ *
+ * Leaf element — not a scoped block. Image() takes a string-literal id,
+ * a `CC_ImageRef *` (texture + scale mode), and optional Clay fields:
+ *
+ *     Image("Avatar", ImgCrop(&avatar_tex),
+ *           .layout       = { .sizing = { Fixed(64), Fixed(64) } },
+ *           .cornerRadius = RadiusAll(999));
+ *
+ * ------- CC_ImageRef and scale modes ------------------------------------
+ *
+ * The second argument is a `CC_ImageRef *` — a small struct pairing a
+ * `Texture2D *` with a `CC_ImageScale` enum that tells the renderer how
+ * the texture should fit inside its element bounding box:
+ *
+ *   CC_IMAGE_FILL  — stretch to fill the box, aspect ratio ignored.
+ *                    This is the default and the zero value, so a bare
+ *                    `{&tex}` behaves like Fill.
+ *   CC_IMAGE_FIT   — "contain": preserve aspect, shrink to fit inside
+ *                    the box, with transparent letterbox / pillarbox
+ *                    margins on whichever axis has slack.
+ *   CC_IMAGE_CROP  — "cover": preserve aspect, scale so the image
+ *                    covers the whole box, cropping overflow evenly
+ *                    from both sides of the longer axis.
+ *
+ * Three sugar macros exist so you don't have to type compound literals:
+ *
+ *     ImgFill(&tex)  →  &(CC_ImageRef){&tex, CC_IMAGE_FILL}
+ *     ImgFit(&tex)   →  &(CC_ImageRef){&tex, CC_IMAGE_FIT}
+ *     ImgCrop(&tex)  →  &(CC_ImageRef){&tex, CC_IMAGE_CROP}
+ *
+ * The compound literal lives until the end of the enclosing block, so
+ * passing them directly as an argument to Image() inside a frame's
+ * BuildUI() is safe — they're valid until CC_End() returns.
+ *
+ * ------- cornerRadius ---------------------------------------------------
+ *
+ * Image honors `.cornerRadius` on all three scale modes — the raylib
+ * backend masks through a cached RenderTexture2D, so `RadiusAll(999)`
+ * gives you a circular avatar regardless of scale mode. Zero radius
+ * (the default) skips the mask pass for the fast path.
+ *
+ * ------- Other Clay fields ----------------------------------------------
+ *
+ * Image accepts every CC_ElementDeclaration field the container macros
+ * do — .layout, .backgroundColor (used as the image tint on the raylib
+ * backend), .border, .floating, etc. See the Column/Row/Box section
+ * above for the full menu. */
+
+#ifndef CC_IMAGE_REF_DEFINED_
+#define CC_IMAGE_REF_DEFINED_ 1
+typedef enum {
+  CC_IMAGE_FILL = 0, /* default: stretch to fill box, aspect ignored */
+  CC_IMAGE_FIT,      /* contain: preserve aspect, letterbox margins   */
+  CC_IMAGE_CROP,     /* cover: preserve aspect, crop overflow         */
+} CC_ImageScale;
+#endif
+
+#ifndef CCOMPOSE_NO_BACKEND
+#ifndef CC_IMAGE_REF_STRUCT_DEFINED_
+#define CC_IMAGE_REF_STRUCT_DEFINED_ 1
+typedef struct {
+  Texture2D *texture;
+  CC_ImageScale scale;
+} CC_ImageRef;
+#endif
+
+/* Acquire a CC_ImageRef slot from ccompose's per-frame pool. The pool
+ * resets at the start of every CC_Begin(), so the returned pointer is
+ * valid until the next frame starts — which is exactly when Clay stops
+ * reading it. Returns NULL if the pool is full (CC_IMAGE_REF_POOL_SIZE
+ * entries per frame); in that case Image() will silently draw nothing.
+ *
+ * The ImgFill / ImgFit / ImgCrop sugar macros below wrap this — prefer
+ * them at call sites. */
+CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale);
+
+/* One-liner sugar for the common scale modes — uses the per-frame pool
+ * so the returned pointer stays valid through CC_End(). */
+#define ImgFill(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_FILL)
+#define ImgFit(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_FIT)
+#define ImgCrop(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_CROP)
+#endif
+
+#define CC_IMAGE_IMPL_(scope, id_literal, ref_expr, ...)                       \
+  do {                                                                         \
+    CC_Scope scope = CC_OpenElement(                                           \
+        "" id_literal "", (int32_t)(sizeof("" id_literal "") - 1),             \
+        CLAY_TOP_TO_BOTTOM,                                                    \
+        (CC_ElementDeclaration){__VA_ARGS__,                                   \
+                                .image = {.imageData = (ref_expr)}});          \
+    CC_CloseScope(&scope);                                                     \
+  } while (0)
+
+#define Image(id_literal, ref_expr, ...)                                       \
+  CC_IMAGE_IMPL_(CC_SCOPE_NAME_(__COUNTER__), id_literal, ref_expr,            \
+                 __VA_ARGS__)
 
 /* =========================================================================
  * Text
