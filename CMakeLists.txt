@@ -90,13 +90,14 @@ else()
 endif()
 
 # ---------- Examples ----------
+#
+# Each example lives in examples/<name>.c and is registered in
+# examples/CMakeLists.txt. Keeping the list there means adding a new
+# example is a one-line change in the examples dir and doesn't touch
+# the top-level build file.
 
 if(CCOMPOSE_BUILD_EXAMPLES AND CCOMPOSE_BACKEND_RAYLIB)
-    add_executable(ccompose_demo examples/demo.c)
-    target_link_libraries(ccompose_demo PRIVATE ccompose)
-    set_target_properties(ccompose_demo PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/examples
-    )
+    add_subdirectory(examples)
 endif()
 
 # ---------- Tests ----------
