@@ -35,6 +35,98 @@ static bool cc__initialized = false;
 static Clay_Dimensions cc__viewport = {800.0f, 600.0f};
 static void (*cc__error_handler_override)(Clay_ErrorData) = NULL;
 
+typedef struct {
+  uint32_t hash;
+  int32_t length;
+  const char *chars;
+} CC__InternEntry;
+
+static CC__InternEntry *cc__intern_table = NULL;
+static size_t cc__intern_cap = 0;
+static size_t cc__intern_count = 0;
+
+static uint32_t cc__intern_hash(const char *s, int32_t length) {
+  uint32_t hash = 2166136261u;
+  for (int32_t i = 0; i < length; ++i) {
+    hash ^= (uint8_t)s[i];
+    hash *= 16777619u;
+  }
+  return hash ? hash : 1u;
+}
+
+static void cc__intern_grow(void) {
+  size_t new_cap = cc__intern_cap ? (cc__intern_cap * 2u) : 1024u;
+  CC__InternEntry *new_table =
+      (CC__InternEntry *)calloc(new_cap, sizeof(CC__InternEntry));
+  if (new_table == NULL) {
+    fprintf(stderr, "ccompose: out of memory growing string intern table\n");
+    exit(EXIT_FAILURE);
+  }
+
+  for (size_t i = 0; i < cc__intern_cap; ++i) {
+    if (cc__intern_table[i].chars == NULL)
+      continue;
+
+    size_t slot = (size_t)cc__intern_table[i].hash & (new_cap - 1u);
+    while (new_table[slot].chars != NULL) {
+      slot = (slot + 1u) & (new_cap - 1u);
+    }
+    new_table[slot] = cc__intern_table[i];
+  }
+
+  free(cc__intern_table);
+  cc__intern_table = new_table;
+  cc__intern_cap = new_cap;
+}
+
+static const char *cc__intern_get_or_add(const char *s, int32_t length) {
+  if (cc__intern_cap == 0 ||
+      (cc__intern_count + 1u) * 10u >= cc__intern_cap * 7u) {
+    cc__intern_grow();
+  }
+
+  uint32_t hash = cc__intern_hash(s, length);
+  size_t slot = (size_t)hash & (cc__intern_cap - 1u);
+
+  while (cc__intern_table[slot].chars != NULL) {
+    CC__InternEntry *entry = &cc__intern_table[slot];
+    if (entry->hash == hash && entry->length == length &&
+        memcmp(entry->chars, s, (size_t)length) == 0) {
+      return entry->chars;
+    }
+    slot = (slot + 1u) & (cc__intern_cap - 1u);
+  }
+
+  char *copy = (char *)malloc((size_t)length + 1u);
+  if (copy == NULL) {
+    fprintf(stderr, "ccompose: out of memory interning string\n");
+    exit(EXIT_FAILURE);
+  }
+  memcpy(copy, s, (size_t)length);
+  copy[length] = '\0';
+
+  cc__intern_table[slot] =
+      (CC__InternEntry){.hash = hash, .length = length, .chars = copy};
+  cc__intern_count++;
+  return copy;
+}
+
+static void cc__intern_shutdown(void) {
+  if (cc__intern_table == NULL)
+    return;
+
+  for (size_t i = 0; i < cc__intern_cap; ++i) {
+    if (cc__intern_table[i].chars != NULL) {
+      free((void *)cc__intern_table[i].chars);
+    }
+  }
+
+  free(cc__intern_table);
+  cc__intern_table = NULL;
+  cc__intern_cap = 0;
+  cc__intern_count = 0;
+}
+
 static void cc__default_error_handler(Clay_ErrorData error) {
   fprintf(stderr, "ccompose/clay error: %.*s\n", (int)error.errorText.length,
           error.errorText.chars);
@@ -218,12 +310,25 @@ void CC_SetErrorHandler(void (*handler)(Clay_ErrorData)) {
   cc__error_handler_override = handler;
 }
 
+CC_String CC_StrIntern(const char *s) {
+  if (s == NULL || s[0] == '\0') {
+    return (CC_String){.isStaticallyAllocated = true, .length = 0, .chars = ""};
+  }
+
+  int32_t length = (int32_t)strlen(s);
+  const char *interned = cc__intern_get_or_add(s, length);
+  return (CC_String){.isStaticallyAllocated = true,
+                     .length = length,
+                     .chars = interned};
+}
+
 void CC_Shutdown(void) {
 #ifndef CCOMPOSE_NO_BACKEND
   if (cc__initialized) {
     cc__backend_shutdown();
   }
 #endif
+  cc__intern_shutdown();
   if (cc__arena_memory != NULL) {
     free(cc__arena_memory);
     cc__arena_memory = NULL;
@@ -288,20 +393,14 @@ CC_RenderCommandArray CC_End(void) {
 
 /* ---------- Element scope ---------- */
 
-CC_Scope CC_OpenElement(const char *id_chars, int32_t id_len,
-                        Clay_LayoutDirection direction,
+CC_Scope CC_OpenElement(CC_String id, Clay_LayoutDirection direction,
                         Clay_ElementDeclaration decl) {
   decl.layout.layoutDirection = direction;
-  if (id_len == 0) {
+  if (id.length == 0) {
     /* Anonymous element — Clay generates an internal ID. */
     Clay__OpenElement();
   } else {
-    Clay_String id_string = (Clay_String){
-        .isStaticallyAllocated = true,
-        .length = id_len,
-        .chars = id_chars,
-    };
-    Clay__OpenElementWithId(Clay__HashString(id_string, 0));
+    Clay__OpenElementWithId(Clay__HashString(id, 0));
   }
   Clay__ConfigureOpenElement(decl);
   return (CC_Scope){.active = 1};

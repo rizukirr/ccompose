@@ -67,17 +67,17 @@
  *                       CC_SetErrorHandler, CC_LoadFont, CC_SetViewport
  *   Container macros    Column("id", ...), Row("id", ...), Box("id", ...),
  *                       Element(direction, "id", ...)
- *   Text macros         Text("literal", ...), TextN(chars, length, ...)
+ *   Text macro          Text("string", ...)
  */
 
 #ifndef CCOMPOSE_H
 #define CCOMPOSE_H
 
+#include "clay.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include "clay.h"
+#include <string.h>
 
 #ifndef CCOMPOSE_NO_BACKEND
 /* When the raylib backend is active, raylib.h is exposed from the public
@@ -141,6 +141,14 @@ extern "C" {
 #define CC_ElementId Clay_ElementId   /* hashed element id  */
 #define CC_ErrorData Clay_ErrorData   /* error callback data*/
 
+/* Intern runtime strings into permanent immutable storage so Clay can
+ * safely use the static-string fast path. */
+CC_String CC_StrIntern(const char *s);
+
+/* Internal: wraps a C string into an interned CC_String.
+ * Used by container/text macros — not part of the public API. */
+#define CC__Str(s) CC_StrIntern(s)
+
 /* Render command types returned by CC_End(). */
 #define CC_RenderCommand Clay_RenderCommand
 #define CC_RenderCommandArray Clay_RenderCommandArray
@@ -148,6 +156,9 @@ extern "C" {
 
 /* Pointer / hit-test function used by CC_Hovered. */
 #define CC_PointerOver Clay_PointerOver
+
+/* Runtime string-id constructor from a CC_String. */
+#define CC_SID CLAY_SID
 
 /* =========================================================================
  * Sugar — sizing, padding, color, alignment
@@ -440,8 +451,8 @@ int CC_GetGlobalFontId(void);
  *     Texture2D avatar = CC_LoadImage("resources/avatar.png");
  *     while (CC_Running()) {
  *         CC_Begin();
- *         Image("Avatar", &avatar, .layout = {.sizing = {Fixed(64), Fixed(64)}});
- *         CC_End();
+ *         Image("Avatar", &avatar, .layout = {.sizing = {Fixed(64),
+ * Fixed(64)}}); CC_End();
  *     }
  *     CC_UnloadImage(avatar);
  *     CC_Shutdown();
@@ -577,13 +588,12 @@ typedef struct {
   int active;
 } CC_Scope;
 
-/* Opens a Clay element with the given id (or anonymously if id_len is
- * 0), forces decl.layout.layoutDirection to `direction`, and configures
+/* Opens a Clay element with the given id (or anonymously if id.length
+ * is 0), forces decl.layout.layoutDirection to `direction`, and configures
  * the element via Clay__ConfigureOpenElement(). You generally don't
  * call this directly — it's the runtime hook the Column/Row/Box macros
  * expand into. */
-CC_Scope CC_OpenElement(const char *id_chars, int32_t id_len,
-                        CC_LayoutDirection direction,
+CC_Scope CC_OpenElement(CC_String id, CC_LayoutDirection direction,
                         CC_ElementDeclaration decl);
 
 /* Closes the element opened by CC_OpenElement. Idempotent: only closes
@@ -596,16 +606,12 @@ void CC_CloseScope(CC_Scope *scope);
 #define CC_JOIN_(a, b) CC_JOIN2_(a, b)
 #define CC_SCOPE_NAME_(c) CC_JOIN_(cc_scope_, CC_JOIN_(c, _))
 
-/* The `"" id_literal ""` trick: prepending and appending an empty
- * string literal forces C's literal-concatenation rule, which only
- * applies if id_literal is itself a string literal. Anything else
- * (NULL, a pointer, an integer) fails to compile here, giving us a
- * free type check at the call site. sizeof("" id_literal "") - 1 is
- * the compile-time length. */
-#define CC_ELEMENT_IMPL_(scope, direction, id_literal, ...)                    \
-  for (CC_Scope scope = CC_OpenElement(                                        \
-           "" id_literal "", (int32_t)(sizeof("" id_literal "") - 1),          \
-           (direction), (CC_ElementDeclaration){__VA_ARGS__});                 \
+/* CC_ELEMENT_IMPL_ takes a CC_String id (built by CC__Str in the
+ * Element macro) and wraps the element body in a single-iteration
+ * for loop. */
+#define CC_ELEMENT_IMPL_(scope, direction, id_string, ...)                     \
+  for (CC_Scope scope = CC_OpenElement((id_string), (direction),               \
+                                       (CC_ElementDeclaration){__VA_ARGS__});  \
        scope.active; CC_CloseScope(&scope))
 
 /* Element — the generic container. Use when you need to pick the
@@ -616,8 +622,8 @@ void CC_CloseScope(CC_Scope *scope);
  *             "Toolbar", .layout = { .childGap = 8 }) { ... }
  */
 #define Element(direction, id_literal, ...)                                    \
-  CC_ELEMENT_IMPL_(CC_SCOPE_NAME_(__COUNTER__), (direction), id_literal,       \
-                   __VA_ARGS__)
+  CC_ELEMENT_IMPL_(CC_SCOPE_NAME_(__COUNTER__), (direction),                   \
+                   CC__Str(id_literal), __VA_ARGS__)
 
 /* Column — vertical stack (CLAY_TOP_TO_BOTTOM). Children are laid out
  * from top to bottom with `.layout.childGap` between them.
@@ -782,26 +788,25 @@ CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale);
 #define ImgCrop(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_CROP)
 #endif
 
-#define CC_IMAGE_IMPL_(scope, id_literal, ref_expr, ...)                       \
+#define CC_IMAGE_IMPL_(scope, id_string, ref_expr, ...)                        \
   do {                                                                         \
-    CC_Scope scope = CC_OpenElement(                                           \
-        "" id_literal "", (int32_t)(sizeof("" id_literal "") - 1),             \
-        CLAY_TOP_TO_BOTTOM,                                                    \
-        (CC_ElementDeclaration){__VA_ARGS__,                                   \
-                                .image = {.imageData = (ref_expr)}});          \
+    CC_Scope scope =                                                           \
+        CC_OpenElement((id_string), CLAY_TOP_TO_BOTTOM,                        \
+                       (CC_ElementDeclaration){                                \
+                           __VA_ARGS__, .image = {.imageData = (ref_expr)}});  \
     CC_CloseScope(&scope);                                                     \
   } while (0)
 
 #define Image(id_literal, ref_expr, ...)                                       \
-  CC_IMAGE_IMPL_(CC_SCOPE_NAME_(__COUNTER__), id_literal, ref_expr,            \
+  CC_IMAGE_IMPL_(CC_SCOPE_NAME_(__COUNTER__), CC__Str(id_literal), ref_expr,   \
                  __VA_ARGS__)
 
 /* =========================================================================
  * Text
  * =========================================================================
  *
- * Leaf element — not a scoped block. Text() takes a **string literal**
- * and a `CC_TextElementConfig` literal with the text style:
+ * Leaf element — not a scoped block. Text() takes a string and a
+ * `CC_TextElementConfig` literal with the text style:
  *
  *     Text("Hello, world!",
  *          .textColor     = Color(255, 255, 255, 255),
@@ -820,38 +825,21 @@ CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale);
  * use custom fonts:
  *
  *   - Per-call: use CC_LoadFont() and pass the returned id as .fontId.
- *   - Global default: use CC_LoadGlobalFont(); Text/TextN calls with
+ *   - Global default: use CC_LoadGlobalFont(); Text calls with
  *     omitted (or zero) .fontId will use that global id.
  *
- * Font-id precedence inside Text/TextN:
+ * Font-id precedence inside Text:
  *   1) if .fontId is non-zero, that explicit value wins
  *   2) otherwise, ccompose injects CC_GetGlobalFontId()
  *   3) if no global font was set, this falls back to 0 (raylib default)
- *
- * ------- Text() vs TextN() -----------------------------------------------
- *
- * Text("literal", ...) requires a true string literal — the length is
- * computed at compile time via sizeof("literal") - 1, and Clay stores
- * the chars pointer with .isStaticallyAllocated = true so its measure
- * cache can key on pointer identity.
- *
- * TextN(chars, length, ...) takes a runtime (chars, length) pair for
- * dynamic strings — string slices, snprintf'd buffers, UTF-8 chunks:
- *
- *     char buf[64];
- *     int len = snprintf(buf, sizeof buf, "FPS: %d", fps);
- *     TextN(buf, len, .textColor = Color(200, 200, 200, 255),
- *                     .fontSize = 12);
- *
- *     // Or from a slice of a larger string
- *     TextN(user.name, user.name_len,
- *           .textColor = Color(255, 255, 255, 255), .fontSize = 16);
  *
  * Clay does NOT copy the chars — the pointer must remain valid at
  * least until Clay_EndLayout() (i.e. until CC_End() returns). Stack
  * buffers inside the current frame's BuildUI() are fine; pointers to
  * freed memory are not.
  */
+
+#define CC_DEFAULT_FONT_SIZE 16
 
 /* String-literal text. Compile-time length via sizeof. */
 static inline CC_TextElementConfig
@@ -860,22 +848,17 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
     int global_font = CC_GetGlobalFontId();
     style.fontId = (uint16_t)((global_font >= 0) ? global_font : 0);
   }
+
+  if (style.fontSize == 0)
+    style.fontSize = CC_DEFAULT_FONT_SIZE;
+
   return style;
 }
 
-/* String-literal text. Compile-time length via sizeof. */
-#define Text(literal_str, ...)                                                 \
-  Clay__OpenTextElement(                                                       \
-      CLAY_STRING(literal_str),                                                \
-      CC__TextStyleWithGlobalFont((CC_TextElementConfig){__VA_ARGS__}))
-
-/* Dynamic-length text. You supply the pointer and length. */
-#define TextN(chars_expr, length_expr, ...)                                    \
-  Clay__OpenTextElement(                                                       \
-      (CC_String){.isStaticallyAllocated = false,                              \
-                  .length = (int32_t)(length_expr),                            \
-                  .chars = (chars_expr)},                                      \
-      CC__TextStyleWithGlobalFont((CC_TextElementConfig){__VA_ARGS__}))
+/* Text element. Accepts any C string — length computed via strlen. */
+#define Text(str, ...)                                                         \
+  Clay__OpenTextElement(CC__Str(str), CC__TextStyleWithGlobalFont((            \
+                                          CC_TextElementConfig){__VA_ARGS__}))
 
 /* =========================================================================
  * Button + pointer interaction
@@ -915,9 +898,8 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
  * will not register a hover until the next CC_Begin tick, because
  * Clay's pointer check runs against the previous frame's layout.
  *
- * The id passed to Button / CC_Hovered / CC_Clicked **must be a string
- * literal** — it is hashed at compile time via CLAY_ID. For runtime
- * ids (e.g. list rows with per-item indices), use Row/Box +
+ * The id passed to Button / CC_Hovered / CC_Clicked is hashed at
+ * runtime via CC_SID. For indexed ids (e.g. list rows), use Row/Box +
  * CC_PointerOver(CLAY_IDI("row", i)) directly.
  *
  * In headless mode (CCOMPOSE_NO_BACKEND) there is no input source, so
@@ -933,15 +915,14 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
  * code. */
 bool CC__MousePressedThisFrame(void);
 
-/* True while the cursor is over the element with the given string-
- * literal id. Thin wrapper around CC_PointerOver(CLAY_ID(id)). */
-#define CC_Hovered(id_literal) CC_PointerOver(CLAY_ID(id_literal))
+/* True while the cursor is over the element with the given id.
+ * Thin wrapper around CC_PointerOver(CC_SID(CC__Str(id))). */
+#define CC_Hovered(id) CC_PointerOver(CC_SID(CC__Str(id)))
 
 /* True on the single frame the user clicks (left mouse press) while
  * hovering the element with the given id. Short-circuits on the mouse
  * check so the Clay id hash is only computed on press frames. */
-#define CC_Clicked(id_literal)                                                 \
-  (CC__MousePressedThisFrame() && CC_Hovered(id_literal))
+#define CC_Clicked(id) (CC__MousePressedThisFrame() && CC_Hovered(id))
 
 /* Button — scoped block for clickable elements. Identical expansion to
  * Row: CLAY_LEFT_TO_RIGHT children, every CC_ElementDeclaration
