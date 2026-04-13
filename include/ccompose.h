@@ -757,6 +757,188 @@ void CC_CloseScope(CC_Scope *scope);
   Element(CLAY_TOP_TO_BOTTOM, id_literal, __VA_ARGS__)
 
 /* =========================================================================
+ * Transitions
+ * =========================================================================
+ *
+ * DefineTransition declares a reusable transition preset at file scope.
+ * It generates static enter/exit callback functions and a static inline
+ * config function that you call by name:
+ *
+ *     DefineTransition(sidebar_anim, 0.4f,
+ *         .enter = { .slideX = -240, .fade = true },
+ *         .exit  = { .slideX = -240, .fade = true },
+ *     );
+ *
+ *     Column("Sidebar", .transition = sidebar_anim(), ...) { ... }
+ *
+ * High-level presets (slideX/Y, fade) and raw Clay properties
+ * (backgroundColor, overlayColor, borderColor, borderWidth) can be
+ * mixed freely. The macro auto-infers the CC_TransitionProp
+ * bitmask from the fields you set.
+ */
+
+/* Effect description for one side of a transition (enter or exit). */
+typedef struct CC_TransitionEffect {
+    /* High-level presets. */
+    float slideX;       /* Pixel offset on X axis. Negative = left. */
+    float slideY;       /* Pixel offset on Y axis. Negative = up.   */
+    bool  fade;         /* true = animate backgroundColor alpha from/to 0. */
+
+    /* Raw Clay properties — set these for fine-grained control.
+     * A zero-valued color (all fields 0) is treated as "not set" and
+     * won't contribute to the properties bitmask. */
+    CC_Color       backgroundColor;
+    CC_Color       overlayColor;
+    CC_Color       borderColor;
+    CC_BorderWidth borderWidth;
+
+    /* Enter-specific: when the enter transition fires relative to
+     * the parent's first frame. Default (0) = SKIP_ON_FIRST_PARENT_FRAME. */
+    CC_TransitionEnterTrigger enterTrigger;
+
+    /* Exit-specific: when the exit transition fires relative to
+     * the parent exiting. Default (0) = SKIP_WHEN_PARENT_EXITS. */
+    CC_TransitionExitTrigger exitTrigger;
+
+    /* Exit-specific: z-ordering of the exiting element among siblings.
+     * Default (0) = UNDERNEATH_SIBLINGS. */
+    CC_ExitTransitionOrdering siblingOrdering;
+} CC_TransitionEffect;
+
+/* ------- Internal: property bitmask inference --------------------------
+ *
+ * These macros inspect a CC_TransitionEffect to build the correct
+ * CC_TransitionProp bitmask. Zero-valued fields are treated as unset.
+ */
+
+/* True if a CC_Color has any non-zero channel. */
+#define CC__COLOR_SET_(c)                                                      \
+    ((c).r != 0 || (c).g != 0 || (c).b != 0 || (c).a != 0)
+
+/* True if a CC_BorderWidth has any non-zero edge. */
+#define CC__BORDER_WIDTH_SET_(bw)                                              \
+    ((bw).left != 0 || (bw).right != 0 || (bw).top != 0 || (bw).bottom != 0  \
+     || (bw).betweenChildren != 0)
+
+/* Compute property flags from an effect. */
+#define CC__EFFECT_PROPS_(e)                                                   \
+    ( ((e).slideX != 0 ? CC_TRANSITION_PROPERTY_X : 0)                         \
+    | ((e).slideY != 0 ? CC_TRANSITION_PROPERTY_Y : 0)                         \
+    | ((e).fade         ? CC_TRANSITION_PROPERTY_BACKGROUND_COLOR : 0)         \
+    | (CC__COLOR_SET_((e).backgroundColor)                                     \
+                        ? CC_TRANSITION_PROPERTY_BACKGROUND_COLOR : 0)         \
+    | (CC__COLOR_SET_((e).overlayColor)                                        \
+                        ? CC_TRANSITION_PROPERTY_OVERLAY_COLOR : 0)            \
+    | (CC__COLOR_SET_((e).borderColor)                                         \
+                        ? CC_TRANSITION_PROPERTY_BORDER_COLOR : 0)             \
+    | (CC__BORDER_WIDTH_SET_((e).borderWidth)                                  \
+                        ? CC_TRANSITION_PROPERTY_BORDER_WIDTH : 0)             \
+    )
+
+/* Check whether an effect has any fields set at all. */
+#define CC__EFFECT_ACTIVE_(e)                                                  \
+    ((e).slideX != 0 || (e).slideY != 0 || (e).fade                           \
+     || CC__COLOR_SET_((e).backgroundColor)                                    \
+     || CC__COLOR_SET_((e).overlayColor)                                       \
+     || CC__COLOR_SET_((e).borderColor)                                        \
+     || CC__BORDER_WIDTH_SET_((e).borderWidth))
+
+/* ------- DefineTransition macro ----------------------------------------
+ *
+ * Usage (file scope only):
+ *
+ *   DefineTransition(name, duration,
+ *       [.handler    = easing_fn,]
+ *       [.properties = CC_TRANSITION_PROPERTY_*,]
+ *       [.interactionHandling = ...,]
+ *       .enter = { .slideX = -240, .fade = true },
+ *       .exit  = { .slideX = -240, .fade = true },
+ *   );
+ *
+ * Expands to:
+ *   - static enter/exit callback functions (name##__enter__ / name##__exit__)
+ *   - a static inline function returning CC_TransitionConfig
+ *
+ * Reference as: .transition = name()
+ *
+ * If .handler is omitted, defaults to CC_EaseOut.
+ * If .properties is omitted, auto-inferred from enter/exit fields.
+ */
+
+/* Internal struct carrying the full DefineTransition(...) arguments. */
+typedef struct CC__TransitionDef {
+    bool (*handler)(CC_TransitionArgs);
+    float duration;
+    CC_TransitionProp properties;
+    CC_TransitionInteraction interactionHandling;
+    CC_TransitionEffect enter;
+    CC_TransitionEffect exit;
+} CC__TransitionDef;
+
+/* Apply a CC_TransitionEffect to a CC_TransitionData (shared by
+ * enter and exit callbacks). */
+#define CC__APPLY_EFFECT_(t, e)                                                \
+    do {                                                                       \
+        (t).boundingBox.x += (e).slideX;                                       \
+        (t).boundingBox.y += (e).slideY;                                       \
+        if ((e).fade) (t).backgroundColor.a = 0;                               \
+        if (CC__COLOR_SET_((e).backgroundColor))                               \
+            (t).backgroundColor = (e).backgroundColor;                         \
+        if (CC__COLOR_SET_((e).overlayColor))                                  \
+            (t).overlayColor = (e).overlayColor;                               \
+        if (CC__COLOR_SET_((e).borderColor))                                   \
+            (t).borderColor = (e).borderColor;                                 \
+        if (CC__BORDER_WIDTH_SET_((e).borderWidth))                            \
+            (t).borderWidth = (e).borderWidth;                                 \
+    } while (0)
+
+#define DefineTransition(name, dur, ...)                                       \
+    /* Enter callback: applies enter effects to target state. */               \
+    static CC_TransitionData name##__enter__(                                  \
+            CC_TransitionData t, CC_TransitionProp p) {                        \
+        (void)p;                                                               \
+        CC_TransitionEffect e =                                                \
+            ((CC__TransitionDef){ .duration = (dur), __VA_ARGS__ }).enter;     \
+        CC__APPLY_EFFECT_(t, e);                                               \
+        return t;                                                              \
+    }                                                                          \
+    /* Exit callback: applies exit effects to initial state. */                \
+    static CC_TransitionData name##__exit__(                                   \
+            CC_TransitionData t, CC_TransitionProp p) {                        \
+        (void)p;                                                               \
+        CC_TransitionEffect e =                                                \
+            ((CC__TransitionDef){ .duration = (dur), __VA_ARGS__ }).exit;      \
+        CC__APPLY_EFFECT_(t, e);                                               \
+        return t;                                                              \
+    }                                                                          \
+    /* Config function: returns a fully built CC_TransitionConfig.           */ \
+    /* Usage: .transition = name()                                          */ \
+    static inline CC_TransitionConfig name(void) {                             \
+        CC__TransitionDef d = { .duration = (dur), __VA_ARGS__ };              \
+        CC_TransitionProp props = d.properties                                 \
+            ? d.properties                                                     \
+            : (CC__EFFECT_PROPS_(d.enter) | CC__EFFECT_PROPS_(d.exit));        \
+        return (CC_TransitionConfig){                                          \
+            .handler = d.handler ? d.handler : CC_EaseOut,                     \
+            .duration = d.duration,                                            \
+            .properties = props,                                               \
+            .interactionHandling = d.interactionHandling,                      \
+            .enter = {                                                         \
+                .setInitialState = CC__EFFECT_ACTIVE_(d.enter)                 \
+                    ? name##__enter__ : NULL,                                  \
+                .trigger = d.enter.enterTrigger,                               \
+            },                                                                 \
+            .exit = {                                                          \
+                .setFinalState = CC__EFFECT_ACTIVE_(d.exit)                    \
+                    ? name##__exit__ : NULL,                                   \
+                .trigger = d.exit.exitTrigger,                                 \
+                .siblingOrdering = d.exit.siblingOrdering,                     \
+            },                                                                 \
+        };                                                                     \
+    }                                                                          \
+    typedef int name##__semicolon_absorber__
+
+/* =========================================================================
  * Image
  * =========================================================================
  *
