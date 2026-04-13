@@ -124,4 +124,8 @@ if(CCOMPOSE_BUILD_TESTS)
     add_executable(ccompose_smoke_test tests/smoke_test.c)
     target_link_libraries(ccompose_smoke_test PRIVATE ccompose_headless)
     add_test(NAME smoke COMMAND ccompose_smoke_test)
+
+    add_executable(ccompose_transition_test tests/transition_test.c)
+    target_link_libraries(ccompose_transition_test PRIVATE ccompose_headless)
+    add_test(NAME transition COMMAND ccompose_transition_test)
 endif()
