@@ -208,6 +208,12 @@ CC_String CC_StrIntern(const char *s);
 /* Easing function alias. */
 #define CC_EaseOut Clay_EaseOut
 
+/* Built-in easing functions. All follow the same signature as Clay_EaseOut:
+ * return true when the transition is complete (ratio >= 1). */
+bool CC_Linear(CC_TransitionArgs arguments);
+bool CC_EaseIn(CC_TransitionArgs arguments);
+bool CC_EaseInOut(CC_TransitionArgs arguments);
+
 /* Pointer / hit-test function used by CC_Hovered. */
 #define CC_PointerOver Clay_PointerOver
 

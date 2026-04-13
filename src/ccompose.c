@@ -412,3 +412,125 @@ void CC_CloseScope(CC_Scope *scope) {
   Clay__CloseElement();
   scope->active = 0;
 }
+
+/* ========================================================================
+ * Easing functions
+ * ========================================================================
+ *
+ * Each function follows Clay_EaseOut's contract:
+ *   - Compute a curve value from elapsedTime / duration
+ *   - Lerp every flagged property from initial -> target by that curve
+ *   - Return true when the animation is complete (ratio >= 1)
+ *
+ * The interpolation body is identical across all easings — only the
+ * curve differs. CC__APPLY_LERP_ factors out the repetitive part.
+ */
+
+/* (t) must be a plain variable or constant — it is evaluated once per
+ * active property (up to 16 times). */
+#define CC__APPLY_LERP_(args, t)                                               \
+    do {                                                                       \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_X)                    \
+            (args).current->boundingBox.x = CLAY__LERP(                         \
+                (args).initial.boundingBox.x,                                  \
+                (args).target.boundingBox.x, (t));                             \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_Y)                    \
+            (args).current->boundingBox.y = CLAY__LERP(                         \
+                (args).initial.boundingBox.y,                                  \
+                (args).target.boundingBox.y, (t));                             \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_WIDTH)                \
+            (args).current->boundingBox.width = CLAY__LERP(                     \
+                (args).initial.boundingBox.width,                              \
+                (args).target.boundingBox.width, (t));                         \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_HEIGHT)               \
+            (args).current->boundingBox.height = CLAY__LERP(                    \
+                (args).initial.boundingBox.height,                             \
+                (args).target.boundingBox.height, (t));                        \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_BACKGROUND_COLOR) {   \
+            (args).current->backgroundColor = (Clay_Color){                    \
+                .r = CLAY__LERP((args).initial.backgroundColor.r,               \
+                               (args).target.backgroundColor.r, (t)),          \
+                .g = CLAY__LERP((args).initial.backgroundColor.g,               \
+                               (args).target.backgroundColor.g, (t)),          \
+                .b = CLAY__LERP((args).initial.backgroundColor.b,               \
+                               (args).target.backgroundColor.b, (t)),          \
+                .a = CLAY__LERP((args).initial.backgroundColor.a,               \
+                               (args).target.backgroundColor.a, (t)),          \
+            };                                                                 \
+        }                                                                      \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_OVERLAY_COLOR) {      \
+            (args).current->overlayColor = (Clay_Color){                       \
+                .r = CLAY__LERP((args).initial.overlayColor.r,                  \
+                               (args).target.overlayColor.r, (t)),             \
+                .g = CLAY__LERP((args).initial.overlayColor.g,                  \
+                               (args).target.overlayColor.g, (t)),             \
+                .b = CLAY__LERP((args).initial.overlayColor.b,                  \
+                               (args).target.overlayColor.b, (t)),             \
+                .a = CLAY__LERP((args).initial.overlayColor.a,                  \
+                               (args).target.overlayColor.a, (t)),             \
+            };                                                                 \
+        }                                                                      \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_BORDER_COLOR) {       \
+            (args).current->borderColor = (Clay_Color){                        \
+                .r = CLAY__LERP((args).initial.borderColor.r,                   \
+                               (args).target.borderColor.r, (t)),              \
+                .g = CLAY__LERP((args).initial.borderColor.g,                   \
+                               (args).target.borderColor.g, (t)),              \
+                .b = CLAY__LERP((args).initial.borderColor.b,                   \
+                               (args).target.borderColor.b, (t)),              \
+                .a = CLAY__LERP((args).initial.borderColor.a,                   \
+                               (args).target.borderColor.a, (t)),              \
+            };                                                                 \
+        }                                                                      \
+        if ((args).properties & CLAY_TRANSITION_PROPERTY_BORDER_WIDTH) {       \
+            (args).current->borderWidth = (Clay_BorderWidth){                  \
+                .left = (uint16_t)CLAY__LERP(                                   \
+                    (args).initial.borderWidth.left,                            \
+                    (args).target.borderWidth.left, (t)),                       \
+                .right = (uint16_t)CLAY__LERP(                                  \
+                    (args).initial.borderWidth.right,                           \
+                    (args).target.borderWidth.right, (t)),                      \
+                .top = (uint16_t)CLAY__LERP(                                    \
+                    (args).initial.borderWidth.top,                             \
+                    (args).target.borderWidth.top, (t)),                        \
+                .bottom = (uint16_t)CLAY__LERP(                                 \
+                    (args).initial.borderWidth.bottom,                          \
+                    (args).target.borderWidth.bottom, (t)),                     \
+                .betweenChildren = (uint16_t)CLAY__LERP(                        \
+                    (args).initial.borderWidth.betweenChildren,                 \
+                    (args).target.borderWidth.betweenChildren, (t)),            \
+            };                                                                 \
+        }                                                                      \
+        /* CLAY_TRANSITION_PROPERTY_CORNER_RADIUS (64): Clay_TransitionData   \
+         * has no cornerRadius field; not interpolable in current Clay API    \
+         * and intentionally unhandled (same as Clay_EaseOut). */             \
+    } while (0)
+
+bool CC_Linear(CC_TransitionArgs arguments) {
+    float ratio = 1.0f;
+    if (arguments.duration > 0)
+        ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
+    CC__APPLY_LERP_(arguments, ratio);
+    return ratio >= 1.0f;
+}
+
+bool CC_EaseIn(CC_TransitionArgs arguments) {
+    float ratio = 1.0f;
+    if (arguments.duration > 0)
+        ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
+    float curve = ratio * ratio * ratio; /* cubic ease-in */
+    CC__APPLY_LERP_(arguments, curve);
+    return ratio >= 1.0f;
+}
+
+bool CC_EaseInOut(CC_TransitionArgs arguments) {
+    float ratio = 1.0f;
+    if (arguments.duration > 0)
+        ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
+    float curve = ratio < 0.5f
+        ? 4.0f * ratio * ratio * ratio
+        : 1.0f - (-2.0f * ratio + 2.0f) * (-2.0f * ratio + 2.0f)
+                * (-2.0f * ratio + 2.0f) / 2.0f;
+    CC__APPLY_LERP_(arguments, curve);
+    return ratio >= 1.0f;
+}
