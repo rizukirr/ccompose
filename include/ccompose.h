@@ -130,6 +130,7 @@ extern "C" {
 #define CC_ClipElementConfig Clay_ClipElementConfig
 #define CC_AspectRatioElementConfig Clay_AspectRatioElementConfig
 #define CC_BorderElementConfig Clay_BorderElementConfig
+#define CC_BorderWidth Clay_BorderWidth
 #define CC_CustomElementConfig Clay_CustomElementConfig
 #define CC_TextElementConfig Clay_TextElementConfig
 
@@ -153,6 +154,59 @@ CC_String CC_StrIntern(const char *s);
 #define CC_RenderCommand Clay_RenderCommand
 #define CC_RenderCommandArray Clay_RenderCommandArray
 #define CC_RenderCommandArray_Get Clay_RenderCommandArray_Get
+
+/* Transition types. */
+#define CC_TransitionConfig       Clay_TransitionElementConfig
+#define CC_TransitionData         Clay_TransitionData
+#define CC_TransitionArgs         Clay_TransitionCallbackArguments
+#define CC_TransitionProp         Clay_TransitionProperty
+#define CC_TransitionState        Clay_TransitionState
+#define CC_TransitionEnterTrigger Clay_TransitionEnterTriggerType
+#define CC_TransitionExitTrigger  Clay_TransitionExitTriggerType
+#define CC_TransitionInteraction  Clay_TransitionInteractionHandlingType
+#define CC_ExitTransitionOrdering Clay_ExitTransitionSiblingOrdering
+
+/* Transition property flags — bitmask of what to animate. */
+#define CC_TRANSITION_PROPERTY_NONE             CLAY_TRANSITION_PROPERTY_NONE
+#define CC_TRANSITION_PROPERTY_X                CLAY_TRANSITION_PROPERTY_X
+#define CC_TRANSITION_PROPERTY_Y                CLAY_TRANSITION_PROPERTY_Y
+#define CC_TRANSITION_PROPERTY_POSITION         CLAY_TRANSITION_PROPERTY_POSITION
+#define CC_TRANSITION_PROPERTY_WIDTH            CLAY_TRANSITION_PROPERTY_WIDTH
+#define CC_TRANSITION_PROPERTY_HEIGHT           CLAY_TRANSITION_PROPERTY_HEIGHT
+#define CC_TRANSITION_PROPERTY_DIMENSIONS       CLAY_TRANSITION_PROPERTY_DIMENSIONS
+#define CC_TRANSITION_PROPERTY_BOUNDING_BOX     CLAY_TRANSITION_PROPERTY_BOUNDING_BOX
+#define CC_TRANSITION_PROPERTY_BACKGROUND_COLOR CLAY_TRANSITION_PROPERTY_BACKGROUND_COLOR
+#define CC_TRANSITION_PROPERTY_OVERLAY_COLOR    CLAY_TRANSITION_PROPERTY_OVERLAY_COLOR
+#define CC_TRANSITION_PROPERTY_CORNER_RADIUS    CLAY_TRANSITION_PROPERTY_CORNER_RADIUS
+#define CC_TRANSITION_PROPERTY_BORDER_COLOR     CLAY_TRANSITION_PROPERTY_BORDER_COLOR
+#define CC_TRANSITION_PROPERTY_BORDER_WIDTH     CLAY_TRANSITION_PROPERTY_BORDER_WIDTH
+#define CC_TRANSITION_PROPERTY_BORDER           CLAY_TRANSITION_PROPERTY_BORDER
+
+/* Transition state enum values. */
+#define CC_TRANSITION_STATE_IDLE          CLAY_TRANSITION_STATE_IDLE
+#define CC_TRANSITION_STATE_ENTERING      CLAY_TRANSITION_STATE_ENTERING
+#define CC_TRANSITION_STATE_TRANSITIONING CLAY_TRANSITION_STATE_TRANSITIONING
+#define CC_TRANSITION_STATE_EXITING       CLAY_TRANSITION_STATE_EXITING
+
+/* Enter trigger types. */
+#define CC_TRANSITION_ENTER_SKIP_ON_FIRST_PARENT_FRAME    CLAY_TRANSITION_ENTER_SKIP_ON_FIRST_PARENT_FRAME
+#define CC_TRANSITION_ENTER_TRIGGER_ON_FIRST_PARENT_FRAME CLAY_TRANSITION_ENTER_TRIGGER_ON_FIRST_PARENT_FRAME
+
+/* Exit trigger types. */
+#define CC_TRANSITION_EXIT_SKIP_WHEN_PARENT_EXITS    CLAY_TRANSITION_EXIT_SKIP_WHEN_PARENT_EXITS
+#define CC_TRANSITION_EXIT_TRIGGER_WHEN_PARENT_EXITS CLAY_TRANSITION_EXIT_TRIGGER_WHEN_PARENT_EXITS
+
+/* Interaction handling during transitions. */
+#define CC_TRANSITION_DISABLE_INTERACTIONS_WHILE_TRANSITIONING_POSITION CLAY_TRANSITION_DISABLE_INTERACTIONS_WHILE_TRANSITIONING_POSITION
+#define CC_TRANSITION_ALLOW_INTERACTIONS_WHILE_TRANSITIONING_POSITION   CLAY_TRANSITION_ALLOW_INTERACTIONS_WHILE_TRANSITIONING_POSITION
+
+/* Exit transition sibling ordering. */
+#define CC_EXIT_TRANSITION_ORDERING_UNDERNEATH_SIBLINGS CLAY_EXIT_TRANSITION_ORDERING_UNDERNEATH_SIBLINGS
+#define CC_EXIT_TRANSITION_ORDERING_NATURAL_ORDER       CLAY_EXIT_TRANSITION_ORDERING_NATURAL_ORDER
+#define CC_EXIT_TRANSITION_ORDERING_ABOVE_SIBLINGS      CLAY_EXIT_TRANSITION_ORDERING_ABOVE_SIBLINGS
+
+/* Easing function alias. */
+#define CC_EaseOut Clay_EaseOut
 
 /* Pointer / hit-test function used by CC_Hovered. */
 #define CC_PointerOver Clay_PointerOver
