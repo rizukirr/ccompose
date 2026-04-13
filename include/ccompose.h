@@ -68,6 +68,32 @@
  *   Container macros    Column("id", ...), Row("id", ...), Box("id", ...),
  *                       Element(direction, "id", ...)
  *   Text macro          Text("string", ...)
+ *   Transitions         DefineTransition(name, dur, .enter = {...}, ...)
+ *                       CC_EaseOut, CC_Linear, CC_EaseIn, CC_EaseInOut
+ *
+ * -------------------------------------------------------------------------
+ * Transitions
+ * -------------------------------------------------------------------------
+ *
+ * Declare reusable transition presets at file scope with DefineTransition:
+ *
+ *   DefineTransition(sidebar_anim, 0.4f,
+ *       .enter = { .slideX = -240, .fade = true },
+ *       .exit  = { .slideX = -240, .fade = true },
+ *   );
+ *
+ * Reference in any container (note the parentheses — it's a function call):
+ *
+ *   Column("Sidebar", .transition = sidebar_anim(),
+ *          .layout = { .sizing = { Fixed(240), Grow() } }) { ... }
+ *
+ * High-level presets (.slideX, .slideY, .fade) and raw Clay properties
+ * (.backgroundColor, .overlayColor, .borderColor, .borderWidth) can be
+ * mixed. Properties bitmask is auto-inferred unless you set .properties
+ * explicitly.
+ *
+ * Built-in easings: CC_EaseOut (default), CC_Linear, CC_EaseIn,
+ * CC_EaseInOut. Pass a custom handler via .handler = my_easing_fn.
  */
 
 #ifndef CCOMPOSE_H
