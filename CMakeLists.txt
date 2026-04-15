@@ -128,4 +128,10 @@ if(CCOMPOSE_BUILD_TESTS)
     add_executable(ccompose_transition_test tests/transition_test.c)
     target_link_libraries(ccompose_transition_test PRIVATE ccompose_headless)
     add_test(NAME transition COMMAND ccompose_transition_test)
+
+
+    add_executable(compose_spacer_divider_test tests/spacer_divider_test.c)
+    target_link_libraries(compose_spacer_divider_test PRIVATE ccompose_headless)
+    add_test(NAME spacer_divider COMMAND compose_spacer_divider_test)
+
 endif()

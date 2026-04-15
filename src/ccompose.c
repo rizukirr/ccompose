@@ -158,6 +158,11 @@ CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale) {
   return r;
 }
 
+#define CC_DRAW_POOL_SIZE 128
+#define CC_DRAW_SLOT_TAG (-1)
+
+static CC_DrawSlot cc__draw_pool[CC_DRAW_POOL_SIZE];
+static int cc__draw_pool_used = 0;
 static int cc__window_width = 800;
 static int cc__window_height = 600;
 static const char *cc__window_title = "ccompose";
@@ -234,6 +239,7 @@ static void cc__backend_begin_frame(void) {
   Vector2 wheel = GetMouseWheelMoveV();
   Clay_UpdateScrollContainers(true, (Clay_Vector2){wheel.x, wheel.y},
                               GetFrameTime());
+  cc__draw_pool_used = 0;
 }
 
 static void cc__backend_end_frame(Clay_RenderCommandArray commands) {
@@ -263,6 +269,17 @@ bool CC__MousePressedThisFrame(void) {
   return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
+CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
+  if (cc__draw_pool_used >= CC_DRAW_POOL_SIZE)
+    return NULL;
+
+  CC_DrawSlot *s = &cc__draw_pool[cc__draw_pool_used++];
+  s->_tag = CC_DRAW_SLOT_TAG;
+  s->fn = fn;
+  s->user = user;
+  return s;
+}
+
 #else /* CCOMPOSE_NO_BACKEND */
 
 void CC_SetWindow(int width, int height, const char *title) {
@@ -272,6 +289,11 @@ void CC_SetWindow(int width, int height, const char *title) {
 }
 void CC_SetWindowFlags(unsigned int raylib_flags) { (void)raylib_flags; }
 void CC_SetBackground(Clay_Color color) { (void)color; }
+CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
+  (void)fn;
+  (void)user;
+  return NULL;
+}
 int CC_LoadFont(const char *path, int base_size) {
   (void)path;
   (void)base_size;
@@ -317,9 +339,8 @@ CC_String CC_StrIntern(const char *s) {
 
   int32_t length = (int32_t)strlen(s);
   const char *interned = cc__intern_get_or_add(s, length);
-  return (CC_String){.isStaticallyAllocated = true,
-                     .length = length,
-                     .chars = interned};
+  return (CC_String){
+      .isStaticallyAllocated = true, .length = length, .chars = interned};
 }
 
 void CC_Shutdown(void) {
@@ -393,6 +414,51 @@ CC_RenderCommandArray CC_End(void) {
 
 /* ---------- Element scope ---------- */
 
+/* Fallback colour when caller leaves .color zeroed. Alpha != 0 so it's
+ * visible, mid-grey matches typical dark-theme dividers., */
+static const CC_Color CC_DividerDefaultColor = {0x50, 0x54, 0x5C, 0xFF};
+
+static void cc__leaf(CC_LayoutDirection dir, CC_ElementDeclaration decl) {
+  decl.layout.layoutDirection = dir;
+  Clay__OpenElement();
+  Clay__ConfigureOpenElement(decl);
+  Clay__CloseElement();
+}
+
+void CC_HSpacer(void) {
+  cc__leaf(CC_LEFT_TO_RIGHT,
+           (CC_ElementDeclaration){
+               .layout = {.sizing = {.width = CLAY_SIZING_GROW(0, 0),
+                                     .height = CLAY_SIZING_FIT(0, 0)}}});
+}
+
+void CC_VSpacer(void) {
+  cc__leaf(CC_TOP_TO_BOTTOM,
+           (CC_ElementDeclaration){
+               .layout = {.sizing = {.width = CLAY_SIZING_GROW(0, 0),
+                                     .height = CLAY_SIZING_FIT(0, 0)}}});
+}
+
+void CC_HDivider(CC_DividerOpts opts) {
+  float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
+  CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;
+  cc__leaf(CC_LEFT_TO_RIGHT,
+           (CC_ElementDeclaration){
+               .layout = {.sizing = {.width = CLAY_SIZING_GROW(0, 0),
+                                     .height = CLAY_SIZING_FIXED(t)}},
+               .backgroundColor = c});
+}
+
+void CC_VDivider(CC_DividerOpts opts) {
+  float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
+  CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;
+  cc__leaf(CC_TOP_TO_BOTTOM,
+           (CC_ElementDeclaration){
+               .layout = {.sizing = {.width = CLAY_SIZING_FIXED(t),
+                                     .height = CLAY_SIZING_GROW(0, 0)}},
+               .backgroundColor = c});
+}
+
 CC_Scope CC_OpenElement(CC_String id, Clay_LayoutDirection direction,
                         Clay_ElementDeclaration decl) {
   decl.layout.layoutDirection = direction;
@@ -429,108 +495,103 @@ void CC_CloseScope(CC_Scope *scope) {
 /* (t) must be a plain variable or constant — it is evaluated once per
  * active property (up to 16 times). */
 #define CC__APPLY_LERP_(args, t)                                               \
-    do {                                                                       \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_X)                    \
-            (args).current->boundingBox.x = CLAY__LERP(                         \
-                (args).initial.boundingBox.x,                                  \
-                (args).target.boundingBox.x, (t));                             \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_Y)                    \
-            (args).current->boundingBox.y = CLAY__LERP(                         \
-                (args).initial.boundingBox.y,                                  \
-                (args).target.boundingBox.y, (t));                             \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_WIDTH)                \
-            (args).current->boundingBox.width = CLAY__LERP(                     \
-                (args).initial.boundingBox.width,                              \
-                (args).target.boundingBox.width, (t));                         \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_HEIGHT)               \
-            (args).current->boundingBox.height = CLAY__LERP(                    \
-                (args).initial.boundingBox.height,                             \
-                (args).target.boundingBox.height, (t));                        \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_BACKGROUND_COLOR) {   \
-            (args).current->backgroundColor = (Clay_Color){                    \
-                .r = CLAY__LERP((args).initial.backgroundColor.r,               \
-                               (args).target.backgroundColor.r, (t)),          \
-                .g = CLAY__LERP((args).initial.backgroundColor.g,               \
-                               (args).target.backgroundColor.g, (t)),          \
-                .b = CLAY__LERP((args).initial.backgroundColor.b,               \
-                               (args).target.backgroundColor.b, (t)),          \
-                .a = CLAY__LERP((args).initial.backgroundColor.a,               \
-                               (args).target.backgroundColor.a, (t)),          \
-            };                                                                 \
-        }                                                                      \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_OVERLAY_COLOR) {      \
-            (args).current->overlayColor = (Clay_Color){                       \
-                .r = CLAY__LERP((args).initial.overlayColor.r,                  \
-                               (args).target.overlayColor.r, (t)),             \
-                .g = CLAY__LERP((args).initial.overlayColor.g,                  \
-                               (args).target.overlayColor.g, (t)),             \
-                .b = CLAY__LERP((args).initial.overlayColor.b,                  \
-                               (args).target.overlayColor.b, (t)),             \
-                .a = CLAY__LERP((args).initial.overlayColor.a,                  \
-                               (args).target.overlayColor.a, (t)),             \
-            };                                                                 \
-        }                                                                      \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_BORDER_COLOR) {       \
-            (args).current->borderColor = (Clay_Color){                        \
-                .r = CLAY__LERP((args).initial.borderColor.r,                   \
-                               (args).target.borderColor.r, (t)),              \
-                .g = CLAY__LERP((args).initial.borderColor.g,                   \
-                               (args).target.borderColor.g, (t)),              \
-                .b = CLAY__LERP((args).initial.borderColor.b,                   \
-                               (args).target.borderColor.b, (t)),              \
-                .a = CLAY__LERP((args).initial.borderColor.a,                   \
-                               (args).target.borderColor.a, (t)),              \
-            };                                                                 \
-        }                                                                      \
-        if ((args).properties & CLAY_TRANSITION_PROPERTY_BORDER_WIDTH) {       \
-            (args).current->borderWidth = (Clay_BorderWidth){                  \
-                .left = (uint16_t)CLAY__LERP(                                   \
-                    (args).initial.borderWidth.left,                            \
-                    (args).target.borderWidth.left, (t)),                       \
-                .right = (uint16_t)CLAY__LERP(                                  \
-                    (args).initial.borderWidth.right,                           \
-                    (args).target.borderWidth.right, (t)),                      \
-                .top = (uint16_t)CLAY__LERP(                                    \
-                    (args).initial.borderWidth.top,                             \
-                    (args).target.borderWidth.top, (t)),                        \
-                .bottom = (uint16_t)CLAY__LERP(                                 \
-                    (args).initial.borderWidth.bottom,                          \
-                    (args).target.borderWidth.bottom, (t)),                     \
-                .betweenChildren = (uint16_t)CLAY__LERP(                        \
-                    (args).initial.borderWidth.betweenChildren,                 \
-                    (args).target.borderWidth.betweenChildren, (t)),            \
-            };                                                                 \
-        }                                                                      \
-        /* CLAY_TRANSITION_PROPERTY_CORNER_RADIUS (64): Clay_TransitionData   \
-         * has no cornerRadius field; not interpolable in current Clay API    \
-         * and intentionally unhandled (same as Clay_EaseOut). */             \
-    } while (0)
+  do {                                                                         \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_X)                        \
+      (args).current->boundingBox.x = CLAY__LERP(                              \
+          (args).initial.boundingBox.x, (args).target.boundingBox.x, (t));     \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_Y)                        \
+      (args).current->boundingBox.y = CLAY__LERP(                              \
+          (args).initial.boundingBox.y, (args).target.boundingBox.y, (t));     \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_WIDTH)                    \
+      (args).current->boundingBox.width =                                      \
+          CLAY__LERP((args).initial.boundingBox.width,                         \
+                     (args).target.boundingBox.width, (t));                    \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_HEIGHT)                   \
+      (args).current->boundingBox.height =                                     \
+          CLAY__LERP((args).initial.boundingBox.height,                        \
+                     (args).target.boundingBox.height, (t));                   \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_BACKGROUND_COLOR) {       \
+      (args).current->backgroundColor = (Clay_Color){                          \
+          .r = CLAY__LERP((args).initial.backgroundColor.r,                    \
+                          (args).target.backgroundColor.r, (t)),               \
+          .g = CLAY__LERP((args).initial.backgroundColor.g,                    \
+                          (args).target.backgroundColor.g, (t)),               \
+          .b = CLAY__LERP((args).initial.backgroundColor.b,                    \
+                          (args).target.backgroundColor.b, (t)),               \
+          .a = CLAY__LERP((args).initial.backgroundColor.a,                    \
+                          (args).target.backgroundColor.a, (t)),               \
+      };                                                                       \
+    }                                                                          \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_OVERLAY_COLOR) {          \
+      (args).current->overlayColor = (Clay_Color){                             \
+          .r = CLAY__LERP((args).initial.overlayColor.r,                       \
+                          (args).target.overlayColor.r, (t)),                  \
+          .g = CLAY__LERP((args).initial.overlayColor.g,                       \
+                          (args).target.overlayColor.g, (t)),                  \
+          .b = CLAY__LERP((args).initial.overlayColor.b,                       \
+                          (args).target.overlayColor.b, (t)),                  \
+          .a = CLAY__LERP((args).initial.overlayColor.a,                       \
+                          (args).target.overlayColor.a, (t)),                  \
+      };                                                                       \
+    }                                                                          \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_BORDER_COLOR) {           \
+      (args).current->borderColor = (Clay_Color){                              \
+          .r = CLAY__LERP((args).initial.borderColor.r,                        \
+                          (args).target.borderColor.r, (t)),                   \
+          .g = CLAY__LERP((args).initial.borderColor.g,                        \
+                          (args).target.borderColor.g, (t)),                   \
+          .b = CLAY__LERP((args).initial.borderColor.b,                        \
+                          (args).target.borderColor.b, (t)),                   \
+          .a = CLAY__LERP((args).initial.borderColor.a,                        \
+                          (args).target.borderColor.a, (t)),                   \
+      };                                                                       \
+    }                                                                          \
+    if ((args).properties & CLAY_TRANSITION_PROPERTY_BORDER_WIDTH) {           \
+      (args).current->borderWidth = (Clay_BorderWidth){                        \
+          .left = (uint16_t)CLAY__LERP((args).initial.borderWidth.left,        \
+                                       (args).target.borderWidth.left, (t)),   \
+          .right = (uint16_t)CLAY__LERP((args).initial.borderWidth.right,      \
+                                        (args).target.borderWidth.right, (t)), \
+          .top = (uint16_t)CLAY__LERP((args).initial.borderWidth.top,          \
+                                      (args).target.borderWidth.top, (t)),     \
+          .bottom =                                                            \
+              (uint16_t)CLAY__LERP((args).initial.borderWidth.bottom,          \
+                                   (args).target.borderWidth.bottom, (t)),     \
+          .betweenChildren = (uint16_t)CLAY__LERP(                             \
+              (args).initial.borderWidth.betweenChildren,                      \
+              (args).target.borderWidth.betweenChildren, (t)),                 \
+      };                                                                       \
+    }                                                                          \
+    /* CLAY_TRANSITION_PROPERTY_CORNER_RADIUS (64): Clay_TransitionData        \
+     * has no cornerRadius field; not interpolable in current Clay API         \
+     * and intentionally unhandled (same as Clay_EaseOut). */                  \
+  } while (0)
 
 bool CC_Linear(CC_TransitionArgs arguments) {
-    float ratio = 1.0f;
-    if (arguments.duration > 0)
-        ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
-    CC__APPLY_LERP_(arguments, ratio);
-    return ratio >= 1.0f;
+  float ratio = 1.0f;
+  if (arguments.duration > 0)
+    ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
+  CC__APPLY_LERP_(arguments, ratio);
+  return ratio >= 1.0f;
 }
 
 bool CC_EaseIn(CC_TransitionArgs arguments) {
-    float ratio = 1.0f;
-    if (arguments.duration > 0)
-        ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
-    float curve = ratio * ratio * ratio; /* cubic ease-in */
-    CC__APPLY_LERP_(arguments, curve);
-    return ratio >= 1.0f;
+  float ratio = 1.0f;
+  if (arguments.duration > 0)
+    ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
+  float curve = ratio * ratio * ratio; /* cubic ease-in */
+  CC__APPLY_LERP_(arguments, curve);
+  return ratio >= 1.0f;
 }
 
 bool CC_EaseInOut(CC_TransitionArgs arguments) {
-    float ratio = 1.0f;
-    if (arguments.duration > 0)
-        ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
-    float curve = ratio < 0.5f
-        ? 4.0f * ratio * ratio * ratio
-        : 1.0f - (-2.0f * ratio + 2.0f) * (-2.0f * ratio + 2.0f)
-                * (-2.0f * ratio + 2.0f) / 2.0f;
-    CC__APPLY_LERP_(arguments, curve);
-    return ratio >= 1.0f;
+  float ratio = 1.0f;
+  if (arguments.duration > 0)
+    ratio = CLAY__MIN(arguments.elapsedTime / arguments.duration, 1.0f);
+  float curve = ratio < 0.5f
+                    ? 4.0f * ratio * ratio * ratio
+                    : 1.0f - (-2.0f * ratio + 2.0f) * (-2.0f * ratio + 2.0f) *
+                                 (-2.0f * ratio + 2.0f) / 2.0f;
+  CC__APPLY_LERP_(arguments, curve);
+  return ratio >= 1.0f;
 }
