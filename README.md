@@ -5,11 +5,9 @@ Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building im
 > [!WARNING]
 > **Not production ready.** ccompose is under heavy development. APIs, build layout, and behavior can change without notice. Expect breakage, missing features, and rough edges. Do not use this in anything you care about yet.
 
-![demo](assets/ss.png)
-
 ## Demo Video
 
-https://github.com/user-attachments/assets/d81e628b-dc51-41b5-b5ed-47d669926afa
+https://github.com/user-attachments/assets/80fa3cc7-f1c5-4ab4-b352-da707138f55c
 
 ## Example
 
