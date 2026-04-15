@@ -4,7 +4,9 @@
 **/.omx
 /build
 /external/clay
+**/superpowers/**
 /compile_commands.json
 /.codex
 /external/nanosvg
 /out/Debug
+/.no-vibe
