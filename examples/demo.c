@@ -10,8 +10,13 @@
 
 #include "../include/ccompose.h"
 #include "raylib.h"
+#include <math.h>
 #include <stdio.h>
-#include <string.h>
+
+typedef struct {
+  float t;
+  int dot_count;
+} CanvasState;
 
 static const CC_Color COLOR_BG = {18, 18, 20, 255};
 static const CC_Color COLOR_SURFACE = {28, 28, 34, 255};
@@ -22,25 +27,49 @@ static const CC_Color COLOR_TEXT = {236, 236, 236, 255};
 static const CC_Color COLOR_MUTED = {160, 160, 170, 255};
 static const CC_Color COLOR_TRANSPARENT = {0, 0, 0, 0};
 
+static void paint_canvas(CC_BoundingBox bb, void *user) {
+  CanvasState *s = (CanvasState *)user;
+
+  /* Gradient background, bb-relative */
+  DrawRectangleGradientV((int)bb.x, (int)bb.y, (int)bb.width, (int)bb.height,
+                         (Color){30, 40, 70, 255}, (Color){70, 30, 90, 255});
+
+  /* Bouncing dots using sin/cos, relative to bb*/
+  for (int i = 0; i < s->dot_count; i++) {
+    float phase = s->t * 1.2f + (float)i * 0.9f;
+    float nx = 0.5f + 0.4f * sinf(phase);
+    float ny = 0.5f + 0.35 * cosf(phase * 1.3f);
+    float cx = bb.x + nx * bb.width;
+    float cy = bb.y + ny * bb.height;
+    float r = 6.0f + 3.0f * sinf(phase * 2.0f);
+    unsigned char alpha = (unsigned char)(160 + 60 * sinf(phase));
+    DrawCircleV((Vector2){cx, cy}, r, (Color){180, 220, 255, alpha});
+  }
+
+  DrawRectangleLinesEx(
+      (Rectangle){bb.x + 1, bb.y + 1, bb.width - 2, bb.height - 2}, 1.0f,
+      (Color){255, 255, 255, 255});
+}
+
 static void BuildUI(Texture2D *avatar_tex) {
   static const char *current_page = "Home";
+  static CanvasState canvas_state = {.t = 0.0f, .dot_count = 12};
 
   while (CC_Running()) {
     CC_Begin();
+    canvas_state.t = (float)GetTime();
     Column("Root",
            .layout = {.sizing = {Grow(), Grow()},
                       .padding = PadAll(24),
                       .childGap = 16},
            .backgroundColor = COLOR_BG) {
 
-      /* Header card */
-      Row("Header",
-          .layout = {.sizing = {Grow(), Fixed(64)},
-                     .padding = Pad(20, 20, 16, 16),
-                     .childGap = 12,
-                     .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
-          .backgroundColor = COLOR_SURFACE, .cornerRadius = RadiusAll(8),
-          .border = {.color = COLOR_BORDER, .width = {1, 1, 1, 1, 0}}) {
+      DrawRow("Canvas", paint_canvas, &canvas_state,
+              .layout = {.sizing = {Grow(), Fixed(200)},
+                         .padding = Pad(20, 20, 16, 16),
+                         .childGap = 12,
+                         .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
+              .cornerRadius = RadiusAll(8)) {
 
         /* Box used as a single-child decoration: a fixed-size circular
          * badge holding a single character of text. */
@@ -49,13 +78,14 @@ static void BuildUI(Texture2D *avatar_tex) {
               .cornerRadius = RadiusAll(999));
 
         Column("HeaderText",
-               .layout = {.sizing = {Grow(), Fit()}, .childGap = 4}) {
+               .layout = {.sizing = {Fit(), Fit()}, .childGap = 4}) {
           Text("ccompose", .textColor = COLOR_ACCENT, .fontSize = 28);
           Text("A Jetpack-Compose-shaped wrapper around Clay",
-               .textColor = COLOR_MUTED, .fontSize = 14);
+               .textColor = COLOR_MUTED, .fontSize = 14,
+               .wrapMode = CC_TEXT_WRAP_WORDS);
         }
       }
-
+      /* Header card */
       /* Two-column body */
       Row("Body", .layout = {.sizing = {Grow(), Grow()}, .childGap = 16}) {
 
@@ -78,7 +108,7 @@ static void BuildUI(Texture2D *avatar_tex) {
           Button("NavHome",
                  .layout = {.sizing = {Grow(), Fit()},
                             .padding = Pad(12, 12, 8, 8),
-                            .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
+                            .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
                  .backgroundColor =
                      CC_Hovered("NavHome") ? COLOR_HOVER : COLOR_TRANSPARENT,
                  .cornerRadius = RadiusAll(6)) {
@@ -126,7 +156,7 @@ static void BuildUI(Texture2D *avatar_tex) {
           Button("NavLayout",
                  .layout = {.sizing = {Grow(), Fit()},
                             .padding = Pad(12, 12, 8, 8),
-                            .childAlignment = {.y = CLAY_ALIGN_Y_CENTER}},
+                            .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
                  .backgroundColor =
                      CC_Hovered("NavLayout") ? COLOR_HOVER : COLOR_TRANSPARENT,
                  .cornerRadius = RadiusAll(6)) {
@@ -144,12 +174,11 @@ static void BuildUI(Texture2D *avatar_tex) {
           /* current_page is a runtime pointer (rebound by the sidebar
            * Buttons), so we use TextN() which takes (chars, length) —
            * Text() is string-literal-only by design. */
-          TextN(current_page, (int)strlen(current_page),
-                .textColor = COLOR_TEXT, .fontSize = 32);
+          Text(current_page, .textColor = COLOR_TEXT, .fontSize = 32);
           Text("This window is laid out by Clay and driven by "
                "ccompose's Column / Row / Text macros.",
                .textColor = COLOR_MUTED, .fontSize = 16,
-               .wrapMode = CLAY_TEXT_WRAP_WORDS);
+               .wrapMode = CC_TEXT_WRAP_WORDS);
 
           /* Anonymous accent pill — empty ID = no stable name. */
           Row("", .layout = {.padding = Pad(14, 14, 8, 8), .childGap = 8},

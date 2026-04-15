@@ -15,4 +15,5 @@ function(ccompose_add_example target source)
 endfunction()
 
 ccompose_add_example(ccompose_demo   demo.c)
-ccompose_add_example(muslimtify_gui  muslimtify_gui.c)
+
+add_subdirectory(muslimtify_official)
