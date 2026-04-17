@@ -12,8 +12,10 @@ function(ccompose_add_example target source)
     set_target_properties(${target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/examples
     )
+    ccompose_apply_web_flags(${target})
 endfunction()
 
-ccompose_add_example(ccompose_demo   demo.c)
+ccompose_add_example(ccompose_demo    demo.c)
+ccompose_add_example(ccompose_landing landing.c)
 
 add_subdirectory(muslimtify_official)

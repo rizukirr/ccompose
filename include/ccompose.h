@@ -504,6 +504,39 @@ void CC_Begin(void);
  * commands without drawing anything. */
 CC_RenderCommandArray CC_End(void);
 
+/* Run the main loop by repeatedly calling the user-supplied frame
+ * function until the window closes. Portable across native and web:
+ *
+ *     static void frame(void) {
+ *         CC_Begin();
+ *         Column("Root", ...) { ... }
+ *         CC_End();
+ *     }
+ *
+ *     int main(void) {
+ *         CC_SetWindow(...);
+ *         CC_Init();
+ *         CC_RUN_LOOP(frame);
+ *         CC_Shutdown();
+ *     }
+ *
+ * Native builds expand to `while (CC_Running()) frame();`. Emscripten
+ * builds hand the frame off to `emscripten_set_main_loop` because the
+ * browser owns the event loop — a plain while-loop would hang the tab.
+ *
+ * The frame function must take no arguments and return void. Pass shared
+ * state through a file-scope pointer (see examples/demo.c). */
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#define CC_RUN_LOOP(frame_fn) emscripten_set_main_loop((frame_fn), 0, 1)
+#else
+#define CC_RUN_LOOP(frame_fn)                                                  \
+  do {                                                                         \
+    while (CC_Running())                                                       \
+      (frame_fn)();                                                            \
+  } while (0)
+#endif
+
 /* Callback signature for Draw / DrawRow / DrawColumn elements.
  *
  *   bb   — the bounding box Clay computed for the element, in screen
@@ -873,10 +906,6 @@ void CC_CloseScope(CC_Scope *scope);
  * Clay element, configure it and close it in one call — so they are safe to
  * use in loops.
  *
- * TODO: fixed-length dividers (e.g. 48px tall VDivider between buttons).
- *       Current API always grows the cross axis; callers that need a fixed
- *       length still have to use an explicit Box.
- *
  *     Row("Toolbar"){
  *         Text("File", ...);
  *         HSpacer();
@@ -891,6 +920,7 @@ void CC_CloseScope(CC_Scope *scope);
  *     }
  */
 typedef struct {
+  float size;
   float thickness;
   CC_Color color;
 } CC_DividerOpts;

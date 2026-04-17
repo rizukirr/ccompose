@@ -51,14 +51,17 @@ static void paint_canvas(CC_BoundingBox bb, void *user) {
       (Color){255, 255, 255, 255});
 }
 
-static void BuildUI(Texture2D *avatar_tex) {
-  static const char *current_page = "Home";
-  static CanvasState canvas_state = {.t = 0.0f, .dot_count = 12};
+/* Shared state for the frame callback. Lifted to file scope so the
+ * same function pointer works on native (while-loop) and web
+ * (emscripten_set_main_loop) — see CC_RUN_LOOP in ccompose.h. */
+static Texture2D *avatar_tex = NULL;
+static const char *current_page = "Home";
+static CanvasState canvas_state = {.t = 0.0f, .dot_count = 12};
 
-  while (CC_Running()) {
-    CC_Begin();
-    canvas_state.t = (float)GetTime();
-    Column("Root",
+static void frame(void) {
+  CC_Begin();
+  canvas_state.t = (float)GetTime();
+  Column("Root",
            .layout = {.sizing = {Grow(), Grow()},
                       .padding = PadAll(24),
                       .childGap = 16},
@@ -189,8 +192,7 @@ static void BuildUI(Texture2D *avatar_tex) {
         }
       }
     }
-    CC_End();
-  }
+  CC_End();
 }
 
 int main(void) {
@@ -210,11 +212,12 @@ int main(void) {
         "ccompose demo: global font load failed, using default font (id=0)\n");
   }
 
-  Texture2D avatar_tex = CC_LoadImage("examples/resources/profile.jpg");
+  Texture2D avatar_texture = CC_LoadImage("examples/resources/profile.jpg");
+  avatar_tex = &avatar_texture;
 
-  BuildUI(&avatar_tex);
+  CC_RUN_LOOP(frame);
 
-  CC_UnloadImage(avatar_tex);
+  CC_UnloadImage(avatar_texture);
   CC_Shutdown();
   return 0;
 }

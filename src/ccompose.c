@@ -442,21 +442,25 @@ void CC_VSpacer(void) {
 void CC_HDivider(CC_DividerOpts opts) {
   float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
   CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;
-  cc__leaf(CC_LEFT_TO_RIGHT,
-           (CC_ElementDeclaration){
-               .layout = {.sizing = {.width = CLAY_SIZING_GROW(0, 0),
-                                     .height = CLAY_SIZING_FIXED(t)}},
-               .backgroundColor = c});
+  Clay_SizingAxis w =
+      opts.size > 0.0f ? CLAY_SIZING_FIXED(opts.size) : CLAY_SIZING_GROW(0, 0);
+  cc__leaf(
+      CC_LEFT_TO_RIGHT,
+      (CC_ElementDeclaration){
+          .layout = {.sizing = {.width = w, .height = CLAY_SIZING_FIXED(t)}},
+          .backgroundColor = c});
 }
 
 void CC_VDivider(CC_DividerOpts opts) {
   float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
   CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;
-  cc__leaf(CC_TOP_TO_BOTTOM,
-           (CC_ElementDeclaration){
-               .layout = {.sizing = {.width = CLAY_SIZING_FIXED(t),
-                                     .height = CLAY_SIZING_GROW(0, 0)}},
-               .backgroundColor = c});
+  Clay_SizingAxis h =
+      opts.size > 0.0f ? CLAY_SIZING_FIXED(opts.size) : CLAY_SIZING_GROW(0, 0);
+  cc__leaf(
+      CC_TOP_TO_BOTTOM,
+      (CC_ElementDeclaration){
+          .layout = {.sizing = {.width = CLAY_SIZING_FIXED(t), .height = h}},
+          .backgroundColor = c});
 }
 
 CC_Scope CC_OpenElement(CC_String id, Clay_LayoutDirection direction,

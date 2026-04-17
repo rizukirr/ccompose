@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ccompose</title>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+        body { display: flex; align-items: center; justify-content: center; }
+        canvas { display: block; background: #000; outline: none; }
+        canvas:focus { outline: none; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+    <script>
+        var Module = {
+            canvas: (function() {
+                var c = document.getElementById('canvas');
+                c.addEventListener('webglcontextlost', function(e) { e.preventDefault(); }, false);
+                return c;
+            })(),
+            print: function() {},
+            printErr: function() {}
+        };
+    </script>
+    {{{ SCRIPT }}}
+</body>
+</html>

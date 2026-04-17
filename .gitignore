@@ -8,5 +8,6 @@
 /compile_commands.json
 /.codex
 /external/nanosvg
-/out/Debug
+**/Debug
+build**
 /.no-vibe
