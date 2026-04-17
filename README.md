@@ -8,6 +8,7 @@ Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building im
 ## Demo Video
 
 | Desktop | Web Asm |
+| --- | --- |
 | https://github.com/user-attachments/assets/80fa3cc7-f1c5-4ab4-b352-da707138f55c | https://github.com/user-attachments/assets/38088b72-dd5f-4c1e-8d39-860e27716d5a |
 
 ## Example
