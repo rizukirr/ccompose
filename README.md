@@ -127,6 +127,46 @@ cmake -S . -B build -DCCOMPOSE_BACKEND_RAYLIB=OFF
 cmake --build build
 ```
 
+## Web Build (WASM via Emscripten)
+
+The same C source builds for the browser. Install the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html) and activate it, then configure through `emcmake`:
+
+```bash
+# Activate emsdk in the current shell
+source /path/to/emsdk/emsdk_env.sh
+
+emcmake cmake -S . -B build-web
+cmake --build build-web
+```
+
+This produces `.html`, `.js`, and `.wasm` per example under `build-web/examples/`. Serve them over HTTP (browsers block `file://` for WASM):
+
+```bash
+python -m http.server -d build-web/examples 8080
+# open http://localhost:8080/ccompose_demo.html
+```
+
+`CCOMPOSE_TARGET_WEB` auto-enables under the emsdk toolchain. Writing portable apps requires one rule: replace your `while (CC_Running()) { ... }` loop with `CC_RUN_LOOP(frame)`, where `frame` is a `void (*)(void)` that calls `CC_Begin()` / builds the tree / `CC_End()`. Natively it expands to a plain while-loop; under `__EMSCRIPTEN__` it hands off to `emscripten_set_main_loop` because the browser owns the event loop.
+
+```c
+static void frame(void) {
+    CC_Begin();
+    Column("Root", ...) { /* ... */ }
+    CC_End();
+}
+
+int main(void) {
+    CC_SetWindow(800, 600, "ccompose");
+    CC_Init();
+    CC_RUN_LOOP(frame);   // native + web
+    CC_Shutdown();
+}
+```
+
+Put any state the frame reads at file scope (the callback takes no args). See `examples/landing.c` for a full portable example.
+
+Tune link flags in `CMakeLists.txt`'s `ccompose_apply_web_flags` (memory size, ASYNCIFY, preloaded resources, `--shell-file`).
+
 ## Support
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/rizukirr)
