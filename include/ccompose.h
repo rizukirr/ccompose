@@ -107,10 +107,12 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifndef CCOMPOSE_NO_BACKEND
+#ifdef CCOMPOSE_BACKEND_RAYLIB
 /* When the raylib backend is active, raylib.h is exposed from the public
  * header so user code can freely use raylib types (Vector2, Font, FLAG_*)
- * alongside ccompose macros without a separate include. */
+ * alongside ccompose macros without a separate include. The termbox2
+ * backend leaves these symbols undefined — image and font APIs that take
+ * raylib types are also gated behind CCOMPOSE_BACKEND_RAYLIB below. */
 #include "raylib.h"
 #endif
 
@@ -483,6 +485,48 @@ void CC_Shutdown(void);
  * have to break out of the loop yourself. */
 bool CC_Running(void);
 
+/* Quit-handler hook. Called from CC_Running() each tick AFTER the
+ * backend's own close check. Return true to stop the main loop.
+ *
+ * Default (handler unset): window close button + ESC key both quit.
+ * The ESC check is explicit in ccompose, so it works even if you call
+ * SetExitKey(KEY_NULL) to suppress raylib's built-in behavior.
+ *
+ * Setting a custom handler REPLACES the default ESC binding — re-add
+ * IsKeyPressed(KEY_ESCAPE) inside your handler if you still want it. */
+typedef bool (*CC_QuitFn)(void *user);
+void CC_SetQuitHandler(CC_QuitFn fn, void *user);
+
+/* Force the next CC_Running() call to return false. Safe from anywhere
+ * inside the frame — e.g. from a Button click handler. */
+void CC_RequestQuit(void);
+
+/* True if CC_RequestQuit() has been called this session. */
+bool CC_QuitRequested(void);
+
+/* Backend-agnostic key codes for CC_KeyPressed(). The set is intentionally
+ * small — just enough to wire up quit handlers and demo input across
+ * raylib + termbox2 backends. Add more as needed. */
+typedef enum {
+  CC_KEY_NONE = 0,
+  CC_KEY_ESCAPE,
+  CC_KEY_ENTER,
+  CC_KEY_SPACE,
+  CC_KEY_TAB,
+  CC_KEY_Q,
+  CC_KEY_W,
+  CC_KEY_E,
+  CC_KEY_R,
+  CC_KEY_LEFT,
+  CC_KEY_RIGHT,
+  CC_KEY_UP,
+  CC_KEY_DOWN,
+} CC_Key;
+
+/* Edge-triggered: true on the frame the key transitioned from up to
+ * down. Headless backend always returns false. */
+bool CC_KeyPressed(CC_Key key);
+
 /* Start a new frame. Reads raylib's input state (window size, mouse
  * position, mouse button, scroll wheel, frame time), feeds it into Clay
  * via Clay_SetLayoutDimensions / Clay_SetPointerState /
@@ -628,38 +672,17 @@ int CC_LoadGlobalFont(const char *path, int base_size);
  * Defaults to 0 (raylib default font). */
 int CC_GetGlobalFontId(void);
 
-#ifndef CCOMPOSE_NO_BACKEND
+#ifdef CCOMPOSE_BACKEND_RAYLIB
 /* Load an image file from disk and upload it to the GPU as a Texture2D
  * that can be passed to the Image() macro. Thin wrapper over raylib's
  * LoadTexture — supports PNG, JPG, BMP, TGA, GIF, QOI, and anything else
  * raylib handles.
  *
- * Must be called AFTER CC_Init() so raylib has an active GL context.
- * Call CC_UnloadImage() before CC_Shutdown() to release the GPU texture
- * (or let process exit clean it up in throwaway programs).
- *
- * On failure raylib returns a zero-id Texture2D; check tex.id == 0 if
- * you need to distinguish load errors from success.
- *
- * Example:
- *
- *     CC_Init();
- *     Texture2D avatar = CC_LoadImage("resources/avatar.png");
- *     while (CC_Running()) {
- *         CC_Begin();
- *         Image("Avatar", &avatar, .layout = {.sizing = {Fixed(64),
- * Fixed(64)}}); CC_End();
- *     }
- *     CC_UnloadImage(avatar);
- *     CC_Shutdown();
- *
- * Not available in headless mode (CCOMPOSE_NO_BACKEND) — Texture2D is a
- * raylib type, so the declaration is compiled out entirely. */
+ * Raylib-only: gated behind CCOMPOSE_BACKEND_RAYLIB because Texture2D is
+ * a raylib type. Termbox2 and headless builds compile this out entirely. */
 Texture2D CC_LoadImage(const char *path);
 
-/* Release a texture previously returned by CC_LoadImage(). Thin wrapper
- * over UnloadTexture. Safe to call on a zero-id texture. Must be called
- * before CC_Shutdown() while the GL context is still alive. */
+/* Release a texture previously returned by CC_LoadImage(). */
 void CC_UnloadImage(Texture2D texture);
 #endif
 
@@ -1225,7 +1248,7 @@ typedef enum {
 } CC_ImageScale;
 #endif
 
-#ifndef CCOMPOSE_NO_BACKEND
+#ifdef CCOMPOSE_BACKEND_RAYLIB
 #ifndef CC_IMAGE_REF_STRUCT_DEFINED_
 #define CC_IMAGE_REF_STRUCT_DEFINED_ 1
 typedef struct {
@@ -1234,18 +1257,8 @@ typedef struct {
 } CC_ImageRef;
 #endif
 
-/* Acquire a CC_ImageRef slot from ccompose's per-frame pool. The pool
- * resets at the start of every CC_Begin(), so the returned pointer is
- * valid until the next frame starts — which is exactly when Clay stops
- * reading it. Returns NULL if the pool is full (CC_IMAGE_REF_POOL_SIZE
- * entries per frame); in that case Image() will silently draw nothing.
- *
- * The ImgFill / ImgFit / ImgCrop sugar macros below wrap this — prefer
- * them at call sites. */
 CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale);
 
-/* One-liner sugar for the common scale modes — uses the per-frame pool
- * so the returned pointer stays valid through CC_End(). */
 #define ImgFill(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_FILL)
 #define ImgFit(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_FIT)
 #define ImgCrop(tex_ptr) CC_AcquireImageRef((tex_ptr), CC_IMAGE_CROP)

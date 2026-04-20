@@ -11,3 +11,5 @@
 **/Debug
 build**
 /.no-vibe
+/.codex-plugins/caveman
+/.agents/plugins

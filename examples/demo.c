@@ -195,10 +195,18 @@ static void frame(void) {
   CC_End();
 }
 
+static bool quit_on_q(void *user) {
+  (void)user;
+  if (CC_KeyPressed(CC_KEY_Q))
+    CC_RequestQuit();
+  return CC_KeyPressed(CC_KEY_ESCAPE);
+}
+
 int main(void) {
   CC_SetWindow(960, 640, "ccompose + Clay + raylib");
   CC_SetBackground((CC_Color){0, 0, 0, 255});
   CC_Init();
+  CC_SetQuitHandler(quit_on_q, NULL);
 
   int global_font_id =
       CC_LoadGlobalFont("examples/resources/Roboto-Regular.ttf", 24);
@@ -214,8 +222,6 @@ int main(void) {
 
   Texture2D avatar_texture = CC_LoadImage("examples/resources/profile.jpg");
   avatar_tex = &avatar_texture;
-
-  CC_RUN_LOOP(frame);
 
   CC_UnloadImage(avatar_texture);
   CC_Shutdown();

@@ -15,6 +15,16 @@ include(CMakeDependentOption)
 
 option(CCOMPOSE_BACKEND_RAYLIB
     "Build ccompose with the bundled raylib backend (window + renderer)" ON)
+option(CCOMPOSE_BACKEND_TERMBOX2
+    "Build ccompose with the termbox2 TUI backend (mutually exclusive with raylib)" OFF)
+if(CCOMPOSE_BACKEND_TERMBOX2)
+    # Termbox2 wins; quietly disable raylib so the default ON doesn't trip the conflict.
+    set(CCOMPOSE_BACKEND_RAYLIB OFF CACHE BOOL "" FORCE)
+endif()
+
+set(CCOMPOSE_TERMBOX2_REVISION "master" CACHE STRING
+    "Git revision of termbox2 to fetch (branch, tag, or commit)")
+
 option(CCOMPOSE_BUILD_EXAMPLES
     "Build example programs" ${PROJECT_IS_TOP_LEVEL})
 option(CCOMPOSE_BUILD_TESTS
@@ -99,6 +109,15 @@ function(ccompose_define_library target)
         target_compile_definitions(${target} PUBLIC CCOMPOSE_NO_BACKEND)
     endif()
 
+    # Backend-selection macros are propagated to consumers so the public
+    # header can gate raylib- or termbox2-specific declarations.
+    if(NOT arg_HEADLESS AND CCOMPOSE_BACKEND_RAYLIB)
+        target_compile_definitions(${target} PUBLIC CCOMPOSE_BACKEND_RAYLIB)
+    endif()
+    if(NOT arg_HEADLESS AND CCOMPOSE_BACKEND_TERMBOX2)
+        target_compile_definitions(${target} PUBLIC CCOMPOSE_BACKEND_TERMBOX2)
+    endif()
+
     if(NOT WIN32 AND NOT EMSCRIPTEN)
         target_link_libraries(${target} PUBLIC m)
     endif()
@@ -152,6 +171,41 @@ function(ccompose_apply_web_flags target)
     set_target_properties(${target} PROPERTIES SUFFIX ".html")
 endfunction()
 
+# ---------- termbox2 dependency ----------
+
+function(ccompose_link_termbox2 target)
+    if(EMSCRIPTEN)
+        message(FATAL_ERROR "termbox2 backend is incompatible with Emscripten (needs termios/pty)")
+    endif()
+    include(FetchContent)
+    FetchContent_Declare(
+        termbox2
+        GIT_REPOSITORY https://github.com/termbox/termbox2.git
+        GIT_TAG        ${CCOMPOSE_TERMBOX2_REVISION}
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(termbox2)
+    # termbox2 ships as a single header (termbox2.h) at the repo root.
+    target_include_directories(${target} PRIVATE
+        $<BUILD_INTERFACE:${termbox2_SOURCE_DIR}>
+    )
+    target_include_directories(${target} PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/renderer/termbox2>
+    )
+    # termbox2.h pulls in errno / fileno / ioctl / clock_gettime and
+    # assumes a GNU-flavored Linux toolchain. The helper turned off
+    # C_EXTENSIONS for ccompose, which puts gcc in strict ISO C11 mode and
+    # breaks errno's macro expansion. Re-enable extensions on this target.
+    set_target_properties(${target} PROPERTIES C_EXTENSIONS ON)
+    target_compile_definitions(${target} PRIVATE
+        _GNU_SOURCE=1
+    )
+    # Enable termbox2's 32-bit attribute mode so TB_OUTPUT_TRUECOLOR is
+    # available (24-bit RGB packed colors). Without this, only the 16-color
+    # / 256-color palettes are exposed.
+    target_compile_definitions(${target} PRIVATE TB_OPT_ATTR_W=32)
+endfunction()
+
 # ---------- ccompose library target ----------
 
 ccompose_define_library(ccompose)
@@ -159,13 +213,15 @@ add_library(ccompose::ccompose ALIAS ccompose)
 
 if(CCOMPOSE_BACKEND_RAYLIB)
     ccompose_link_raylib(ccompose)
+elseif(CCOMPOSE_BACKEND_TERMBOX2)
+    ccompose_link_termbox2(ccompose)
 else()
     target_compile_definitions(ccompose PUBLIC CCOMPOSE_NO_BACKEND)
 endif()
 
 # ---------- Examples ----------
 
-if(CCOMPOSE_BUILD_EXAMPLES AND CCOMPOSE_BACKEND_RAYLIB)
+if(CCOMPOSE_BUILD_EXAMPLES AND (CCOMPOSE_BACKEND_RAYLIB OR CCOMPOSE_BACKEND_TERMBOX2))
     add_subdirectory(examples)
 endif()
 
@@ -251,6 +307,7 @@ if(PROJECT_IS_TOP_LEVEL)
     message(STATUS "  C standard          : c${CCOMPOSE_C_STANDARD}")
     message(STATUS "  Build type          : ${CMAKE_BUILD_TYPE}")
     message(STATUS "  raylib backend      : ${CCOMPOSE_BACKEND_RAYLIB}")
+    message(STATUS "  termbox2 backend    : ${CCOMPOSE_BACKEND_TERMBOX2}")
     message(STATUS "  Web (Emscripten)    : ${CCOMPOSE_TARGET_WEB}")
     message(STATUS "  Examples            : ${CCOMPOSE_BUILD_EXAMPLES}")
     message(STATUS "  Tests               : ${CCOMPOSE_BUILD_TESTS}")
