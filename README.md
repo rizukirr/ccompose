@@ -1,6 +1,6 @@
 # ccompose
 
-Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building immediate-mode UI layouts, with optional raylib rendering support and Jetpack Compose like syntax.
+Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building immediate-mode UI layouts, with pluggable rendering backends (raylib for GUI, termbox2 for TUI) and Jetpack Compose like syntax.
 
 > [!WARNING]
 > **Not production ready.** ccompose is under heavy development. APIs, build layout, and behavior can change without notice. Expect breakage, missing features, and rough edges. Do not use this in anything you care about yet.
@@ -58,11 +58,24 @@ int main(void) {
 See the [wiki](https://github.com/rizukirr/ccompose/wiki) for full API docs,
 more examples, and the Clay field reference.
 
+## Backends
+
+ccompose ships two mutually exclusive rendering backends. Pick one at configure time:
+
+| Backend    | CMake flag                             | Renders to              | Dependencies                   |
+| ---------- | -------------------------------------- | ----------------------- | ------------------------------ |
+| raylib     | `-DCCOMPOSE_BACKEND_RAYLIB=ON` (default) | native window / WASM    | raylib 5.5 (auto-fetched)     |
+| termbox2   | `-DCCOMPOSE_BACKEND_TERMBOX2=ON`       | terminal (TUI)          | termbox2 (auto-fetched)       |
+| *headless* | both OFF                               | none (test/CI)          | —                              |
+
+Image and raylib-typed APIs (`CC_LoadImage`, `Image()`, raylib `Texture2D` / `Font`) are only declared when the raylib backend is on.
+
 ## Requirements
 
 - CMake 3.23+
 - C compiler with C11 support
 - (Optional) raylib 5.5 — auto-fetched from source if not already installed
+- (Optional) termbox2 — auto-fetched from source when the TUI backend is enabled (Linux/macOS only; needs termios/pty)
 
 ## Build
 
@@ -118,14 +131,43 @@ ctest --test-dir build --output-on-failure
 ./build/examples/Debug/ccompose_demo.exe
 ```
 
-## Headless Build (No raylib)
+## TUI Build (termbox2)
 
-Skips the raylib backend and the demo target — useful for CI or environments without a display:
+Render the same `Column` / `Row` / `Box` / `Text` DSL into a terminal. Clay's pixel coords are quantized to an 8x16 logical-pixel cell grid; colors use termbox2's truecolor mode (24-bit RGB).
+
+```bash
+cmake -S . -B build-tb -DCCOMPOSE_BACKEND_TERMBOX2=ON
+cmake --build build-tb
+./build-tb/examples/ccompose_tui_demo
+```
+
+Controls in `tui_demo`: `←`/`→` counter, `space` reset, `q`/`esc` quit.
+
+Limits of the TUI backend: no images, no custom fonts, no scissor/overlay rendering. `CC_LoadImage` and the `Image()` macro are compiled out entirely.
+
+## Headless Build (No renderer)
+
+Skips both backends and the demo target — useful for CI or environments without a display:
 
 ```bash
 cmake -S . -B build -DCCOMPOSE_BACKEND_RAYLIB=OFF
 cmake --build build
 ```
+
+## Quit handling & input
+
+`CC_Running()` returns false on the window close button and on `ESC` by default. Customize with `CC_SetQuitHandler` (receives `void *user`, returns `true` to stop the loop) or call `CC_RequestQuit()` from anywhere — e.g. a `Button` click handler.
+
+```c
+static bool quit_on_q_or_esc(void *user) {
+    (void)user;
+    return CC_KeyPressed(CC_KEY_Q) || CC_KeyPressed(CC_KEY_ESCAPE);
+}
+
+CC_SetQuitHandler(quit_on_q_or_esc, NULL);
+```
+
+`CC_KeyPressed(CC_KEY_*)` is a backend-agnostic edge-triggered keyboard check. The enum covers `ESCAPE`, `ENTER`, `SPACE`, `TAB`, `Q/W/E/R`, and arrow keys — add more as needed. Under raylib it maps to `IsKeyPressed`; under termbox2 it reads the per-frame event queue. Setting a custom handler replaces the default ESC binding, so re-add `CC_KEY_ESCAPE` inside your handler if you want to keep it.
 
 ## Web Build (WASM via Emscripten)
 
