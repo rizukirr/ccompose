@@ -151,18 +151,12 @@ static void frame(void) {
   CC_End();
 }
 
-static bool quit_on_q_or_esc(void *user) {
-  (void)user;
-  return CC_KeyPressed(CC_KEY_Q) || CC_KeyPressed(CC_KEY_ESCAPE);
-}
-
 int main(void) {
   CC_SetWindow(1100, 720, "ccompose — landing");
   CC_SetBackground((CC_Color){0, 0, 0, 255});
   CC_Init();
 
   CC_LoadGlobalFont("examples/resources/Roboto-Regular.ttf", 96);
-  CC_SetQuitHandler(quit_on_q_or_esc, NULL);
 
   CC_RUN_LOOP(frame);
 

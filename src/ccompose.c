@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef CCOMPOSE_BACKEND_RAYLIB
+#ifndef CCOMPOSE_NO_BACKEND
 /* Clay's raylib renderer is distributed as a .c file that defines the
  * Clay_Raylib_Initialize / Clay_Raylib_Render / Clay_Raylib_Close
  * functions plus the Raylib_MeasureText callback. Including it here
@@ -34,10 +34,6 @@ static void *cc__arena_memory = NULL;
 static bool cc__initialized = false;
 static Clay_Dimensions cc__viewport = {800.0f, 600.0f};
 static void (*cc__error_handler_override)(Clay_ErrorData) = NULL;
-
-static CC_QuitFn cc__quit_fn = NULL;
-static void *cc__quit_user = NULL;
-static bool cc__quit_requested = false;
 
 typedef struct {
   uint32_t hash;
@@ -138,7 +134,7 @@ static void cc__default_error_handler(Clay_ErrorData error) {
 
 /* ---------- Backend: raylib ---------- */
 
-#ifdef CCOMPOSE_BACKEND_RAYLIB
+#ifndef CCOMPOSE_NO_BACKEND
 
 #define CC_MAX_FONTS 16
 static Font cc__fonts[CC_MAX_FONTS];
@@ -267,47 +263,10 @@ static void cc__backend_shutdown(void) {
   Clay_Raylib_Close();
 }
 
-static float cc__backend_frame_time(void) { return GetFrameTime(); }
-
-bool CC_Running(void) {
-  if (cc__quit_requested)
-    return false;
-  if (WindowShouldClose())
-    return false;
-  if (cc__quit_fn) {
-    if (cc__quit_fn(cc__quit_user))
-      return false;
-  } else if (IsKeyPressed(KEY_ESCAPE)) {
-    return false;
-  }
-  return true;
-}
+bool CC_Running(void) { return !WindowShouldClose(); }
 
 bool CC__MousePressedThisFrame(void) {
   return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-}
-
-static int cc__map_key(CC_Key k) {
-  switch (k) {
-  case CC_KEY_ESCAPE: return KEY_ESCAPE;
-  case CC_KEY_ENTER:  return KEY_ENTER;
-  case CC_KEY_SPACE:  return KEY_SPACE;
-  case CC_KEY_TAB:    return KEY_TAB;
-  case CC_KEY_Q:      return KEY_Q;
-  case CC_KEY_W:      return KEY_W;
-  case CC_KEY_E:      return KEY_E;
-  case CC_KEY_R:      return KEY_R;
-  case CC_KEY_LEFT:   return KEY_LEFT;
-  case CC_KEY_RIGHT:  return KEY_RIGHT;
-  case CC_KEY_UP:     return KEY_UP;
-  case CC_KEY_DOWN:   return KEY_DOWN;
-  default:            return 0;
-  }
-}
-
-bool CC_KeyPressed(CC_Key key) {
-  int rk = cc__map_key(key);
-  return rk ? IsKeyPressed(rk) : false;
 }
 
 CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
@@ -320,14 +279,6 @@ CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
   s->user = user;
   return s;
 }
-
-#elif defined(CCOMPOSE_BACKEND_TERMBOX2)
-
-/* termbox2 backend lives in its own renderer file (mirrors how raylib
- * splits Clay_Raylib_* into clay_renderer_raylib.c). It defines the
- * cc__backend_* hooks plus all CC_Set..., CC_Load..., CC_Running, and
- * CC_KeyPressed symbols that the headless block stubs out below. */
-#include "clay_renderer_termbox2.c"
 
 #else /* CCOMPOSE_NO_BACKEND */
 
@@ -354,15 +305,8 @@ int CC_LoadGlobalFont(const char *path, int base_size) {
   return -1;
 }
 int CC_GetGlobalFontId(void) { return 0; }
-bool CC_Running(void) {
-  if (cc__quit_requested)
-    return false;
-  if (cc__quit_fn && cc__quit_fn(cc__quit_user))
-    return false;
-  return true;
-}
+bool CC_Running(void) { return true; }
 bool CC__MousePressedThisFrame(void) { return false; }
-bool CC_KeyPressed(CC_Key key) { (void)key; return false; }
 
 static Clay_Dimensions cc__default_measure_text(Clay_StringSlice text,
                                                 Clay_TextElementConfig *config,
@@ -387,15 +331,6 @@ void CC_SetViewport(float width, float height) {
 void CC_SetErrorHandler(void (*handler)(Clay_ErrorData)) {
   cc__error_handler_override = handler;
 }
-
-void CC_SetQuitHandler(CC_QuitFn fn, void *user) {
-  cc__quit_fn = fn;
-  cc__quit_user = user;
-}
-
-void CC_RequestQuit(void) { cc__quit_requested = true; }
-
-bool CC_QuitRequested(void) { return cc__quit_requested; }
 
 CC_String CC_StrIntern(const char *s) {
   if (s == NULL || s[0] == '\0') {
@@ -460,10 +395,8 @@ void CC_Init(void) {
 void CC_Begin(void) {
   if (!cc__initialized)
     CC_Init();
-#ifdef CCOMPOSE_BACKEND_RAYLIB
-  cc__image_ref_pool_used = 0;
-#endif
 #ifndef CCOMPOSE_NO_BACKEND
+  cc__image_ref_pool_used = 0;
   cc__backend_begin_frame();
 #endif
   Clay_BeginLayout();
@@ -471,7 +404,7 @@ void CC_Begin(void) {
 
 CC_RenderCommandArray CC_End(void) {
 #ifndef CCOMPOSE_NO_BACKEND
-  Clay_RenderCommandArray commands = Clay_EndLayout(cc__backend_frame_time());
+  Clay_RenderCommandArray commands = Clay_EndLayout(GetFrameTime());
   cc__backend_end_frame(commands);
   return commands;
 #else

@@ -1,10 +1,10 @@
-# Example programs for ccompose. Built when CCOMPOSE_BUILD_EXAMPLES is ON
-# together with one of the rendering backends — the parent CMakeLists.txt
-# enforces that via its add_subdirectory() guard.
+# Example programs for ccompose. Built when both
+# CCOMPOSE_BUILD_EXAMPLES and CCOMPOSE_BACKEND_RAYLIB are ON — the parent
+# CMakeLists.txt enforces that via its add_subdirectory() guard.
 #
-# Demos split by backend:
-#   - raylib   : demo.c, landing.c   (raylib-typed images/fonts)
-#   - termbox2 : tui_demo.c          (text-only, monospace cell grid)
+# Each executable lives in examples/<name>.c, links against the
+# ccompose target, and is written to build/examples/<name> so users can
+# run them with a predictable path.
 
 function(ccompose_add_example target source)
     add_executable(${target} ${source})
@@ -15,9 +15,5 @@ function(ccompose_add_example target source)
     ccompose_apply_web_flags(${target})
 endfunction()
 
-if(CCOMPOSE_BACKEND_RAYLIB)
-    ccompose_add_example(ccompose_demo    demo.c)
-    ccompose_add_example(ccompose_landing landing.c)
-elseif(CCOMPOSE_BACKEND_TERMBOX2)
-    ccompose_add_example(ccompose_tui_demo tui_demo.c)
-endif()
+ccompose_add_example(ccompose_demo    demo.c)
+ccompose_add_example(ccompose_landing landing.c)

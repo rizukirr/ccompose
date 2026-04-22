@@ -1,6 +1,6 @@
 # ccompose
 
-Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building immediate-mode UI layouts, with pluggable rendering backends (raylib for GUI, termbox2 for TUI) and Jetpack Compose like syntax.
+Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building immediate-mode UI layouts, with a raylib renderer and Jetpack Compose like syntax.
 
 > [!WARNING]
 > **Not production ready.** ccompose is under heavy development. APIs, build layout, and behavior can change without notice. Expect breakage, missing features, and rough edges. Do not use this in anything you care about yet.
@@ -8,9 +8,10 @@ Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building im
 ## Demo Video
 
 ### Desktop
-https://github.com/user-attachments/assets/80fa3cc7-f1c5-4ab4-b352-da707138f55c 
+https://github.com/user-attachments/assets/80fa3cc7-f1c5-4ab4-b352-da707138f55c
+
 ### Web Asm
-https://github.com/user-attachments/assets/38088b72-dd5f-4c1e-8d39-860e27716d5a 
+https://github.com/user-attachments/assets/38088b72-dd5f-4c1e-8d39-860e27716d5a
 
 ## Example
 
@@ -41,8 +42,8 @@ int main(void) {
             Button("Quit",
                    .layout = { .padding = PadAll(12) },
                    .backgroundColor = CC_Hovered("Quit")
-                                          ? Color( 80, 140, 220, 255)
-                                          : Color( 40, 100, 200, 255),
+                                          ? Color(80, 140, 220, 255)
+                                          : Color(40, 100, 200, 255),
                    .cornerRadius = RadiusAll(6)) {
                 Text("Quit",
                      .textColor = Color(255, 255, 255, 255),
@@ -63,13 +64,12 @@ more examples, and the Clay field reference.
 
 ## Backends
 
-ccompose ships two mutually exclusive rendering backends. Pick one at configure time:
+ccompose ships a raylib rendering backend. Or disable rendering entirely for tests/CI:
 
-| Backend    | CMake flag                             | Renders to              | Dependencies                   |
-| ---------- | -------------------------------------- | ----------------------- | ------------------------------ |
-| raylib     | `-DCCOMPOSE_BACKEND_RAYLIB=ON` (default) | native window / WASM    | raylib 5.5 (auto-fetched)     |
-| termbox2   | `-DCCOMPOSE_BACKEND_TERMBOX2=ON`       | terminal (TUI)          | termbox2 (auto-fetched)       |
-| *headless* | both OFF                               | none (test/CI)          | —                              |
+| Backend    | CMake flag                               | Renders to           | Dependencies               |
+| ---------- | ---------------------------------------- | -------------------- | -------------------------- |
+| raylib     | `-DCCOMPOSE_BACKEND_RAYLIB=ON` (default) | native window / WASM | raylib 5.5 (auto-fetched) |
+| *headless* | `-DCCOMPOSE_BACKEND_RAYLIB=OFF`          | none (test/CI)       | none                       |
 
 Image and raylib-typed APIs (`CC_LoadImage`, `Image()`, raylib `Texture2D` / `Font`) are only declared when the raylib backend is on.
 
@@ -77,8 +77,7 @@ Image and raylib-typed APIs (`CC_LoadImage`, `Image()`, raylib `Texture2D` / `Fo
 
 - CMake 3.23+
 - C compiler with C11 support
-- (Optional) raylib 5.5 — auto-fetched from source if not already installed
-- (Optional) termbox2 — auto-fetched from source when the TUI backend is enabled (Linux/macOS only; needs termios/pty)
+- (Optional) raylib 5.5 - auto-fetched from source if not already installed
 
 ## Build
 
@@ -114,7 +113,7 @@ cmake -S . -B build ^
 cmake --build build --config Debug
 ```
 
-If you skip the vcpkg step, CMake will fall back to downloading raylib 5.5 from source automatically — no extra system packages needed on Windows (MSVC alone is enough).
+If you skip the vcpkg step, CMake will fall back to downloading raylib 5.5 from source automatically - no extra system packages needed on Windows (MSVC alone is enough).
 
 You can override the fetched raylib version with `-DCCOMPOSE_RAYLIB_VERSION=5.0` if needed.
 
@@ -134,23 +133,9 @@ ctest --test-dir build --output-on-failure
 ./build/examples/Debug/ccompose_demo.exe
 ```
 
-## TUI Build (termbox2)
-
-Render the same `Column` / `Row` / `Box` / `Text` DSL into a terminal. Clay's pixel coords are quantized to an 8x16 logical-pixel cell grid; colors use termbox2's truecolor mode (24-bit RGB).
-
-```bash
-cmake -S . -B build-tb -DCCOMPOSE_BACKEND_TERMBOX2=ON
-cmake --build build-tb
-./build-tb/examples/ccompose_tui_demo
-```
-
-Controls in `tui_demo`: `←`/`→` counter, `space` reset, `q`/`esc` quit.
-
-Limits of the TUI backend: no images, no custom fonts, no scissor/overlay rendering. `CC_LoadImage` and the `Image()` macro are compiled out entirely.
-
 ## Headless Build (No renderer)
 
-Skips both backends and the demo target — useful for CI or environments without a display:
+Skips the renderer and the demo target - useful for CI or environments without a display:
 
 ```bash
 cmake -S . -B build -DCCOMPOSE_BACKEND_RAYLIB=OFF
@@ -159,7 +144,7 @@ cmake --build build
 
 ## Quit handling & input
 
-`CC_Running()` returns false on the window close button and on `ESC` by default. Customize with `CC_SetQuitHandler` (receives `void *user`, returns `true` to stop the loop) or call `CC_RequestQuit()` from anywhere — e.g. a `Button` click handler.
+`CC_Running()` returns false on the window close button and on `ESC` by default. Customize with `CC_SetQuitHandler` (receives `void *user`, returns `true` to stop the loop) or call `CC_RequestQuit()` from anywhere - e.g. a `Button` click handler.
 
 ```c
 static bool quit_on_q_or_esc(void *user) {
@@ -170,7 +155,7 @@ static bool quit_on_q_or_esc(void *user) {
 CC_SetQuitHandler(quit_on_q_or_esc, NULL);
 ```
 
-`CC_KeyPressed(CC_KEY_*)` is a backend-agnostic edge-triggered keyboard check. The enum covers `ESCAPE`, `ENTER`, `SPACE`, `TAB`, `Q/W/E/R`, and arrow keys — add more as needed. Under raylib it maps to `IsKeyPressed`; under termbox2 it reads the per-frame event queue. Setting a custom handler replaces the default ESC binding, so re-add `CC_KEY_ESCAPE` inside your handler if you want to keep it.
+`CC_KeyPressed(CC_KEY_*)` is an edge-triggered keyboard check. The enum covers `ESCAPE`, `ENTER`, `SPACE`, `TAB`, `Q/W/E/R`, and arrow keys - add more as needed. Under raylib it maps to `IsKeyPressed`. Setting a custom handler replaces the default ESC binding, so re-add `CC_KEY_ESCAPE` inside your handler if you want to keep it.
 
 ## Web Build (WASM via Emscripten)
 
