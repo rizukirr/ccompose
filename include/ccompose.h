@@ -1319,7 +1319,10 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
   if (style.fontSize == 0)
     style.fontSize = CC_DEFAULT_FONT_SIZE;
 
-  style.textColor = CC_GetGlobalFontColor();
+  if (style.textColor.a == 0 && style.textColor.r == 0 &&
+      style.textColor.g == 0 && style.textColor.b == 0)
+    style.textColor = CC_GetGlobalFontColor();
+
   return style;
 }
 

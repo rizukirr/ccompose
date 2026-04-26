@@ -33,7 +33,15 @@
 static void *cc__arena_memory = NULL;
 static bool cc__initialized = false;
 static Clay_Dimensions cc__viewport = {800.0f, 600.0f};
-static void (*cc__error_handler_override)(Clay_ErrorData) = NULL;
+static void (*cc__error_handler_override)(CC_ErrorData) = NULL;
+
+/* State that is meaningful with or without a renderer — Clay carries
+ * these values into the render-command stream regardless of whether
+ * anything ends up drawing them. Kept here (not in the raylib block) so
+ * headless builds can store and read them too. */
+static CC_Color cc__background_color = {0, 0, 0, 255};
+static CC_Color cc__font_global_color = ColorHex(0xFFFFFF);
+static int cc__font_global_id = 0;
 
 typedef struct {
   uint32_t hash;
@@ -127,7 +135,7 @@ static void cc__intern_shutdown(void) {
   cc__intern_count = 0;
 }
 
-static void cc__default_error_handler(Clay_ErrorData error) {
+static void cc__default_error_handler(CC_ErrorData error) {
   fprintf(stderr, "ccompose/clay error: %.*s\n", (int)error.errorText.length,
           error.errorText.chars);
 }
@@ -139,8 +147,6 @@ static void cc__default_error_handler(Clay_ErrorData error) {
 #define CC_MAX_FONTS 16
 static Font cc__fonts[CC_MAX_FONTS];
 static int cc__font_count = 0;
-static int cc__font_global_id = 0;
-static CC_Color cc__font_global_color = ColorHex(0xFFFFFF);
 
 /* Per-frame pool of CC_ImageRef slots. ImgFill/Fit/Crop hand out slots
  * from this pool so the pointer they return outlives the call-site
@@ -169,7 +175,6 @@ static int cc__window_height = 600;
 static const char *cc__window_title = "ccompose";
 static unsigned int cc__window_flags =
     FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT;
-static Clay_Color cc__background_color = {0, 0, 0, 255};
 
 void CC_SetWindow(int width, int height, const char *title) {
   cc__window_width = width;
@@ -290,13 +295,22 @@ CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
 
 #else /* CCOMPOSE_NO_BACKEND */
 
+/* Headless / no-renderer build.
+ *
+ * Clay is renderer-agnostic — colors, font ids, layout dimensions, and
+ * the rest of the per-frame state still flow into the render-command
+ * stream that CC_End() returns, even when nothing draws them. So the
+ * setters below mirror the raylib path and store the value into the
+ * shared statics; only the genuinely raylib-specific entry points
+ * (window flags, GPU fonts, GPU textures) are no-ops. */
+
 void CC_SetWindow(int width, int height, const char *title) {
   (void)width;
   (void)height;
   (void)title;
 }
 void CC_SetWindowFlags(unsigned int raylib_flags) { (void)raylib_flags; }
-void CC_SetBackground(Clay_Color color) { (void)color; }
+void CC_SetBackground(CC_Color color) { cc__background_color = color; }
 CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
   (void)fn;
   (void)user;
@@ -313,12 +327,12 @@ int CC_LoadGlobalFont(const char *path, int base_size) {
   return -1;
 }
 int CC_LoadGlobalFontColor(const CC_Color color) {
-  (void)color;
+  cc__font_global_color = color;
   return 0;
 }
-CC_Color CC_GetGlobalFontColor(void) { return (CC_Color){255, 255, 255, 255}; }
+CC_Color CC_GetGlobalFontColor(void) { return cc__font_global_color; }
 
-int CC_GetGlobalFontId(void) { return 0; }
+int CC_GetGlobalFontId(void) { return cc__font_global_id; }
 bool CC_Running(void) { return true; }
 bool CC__MousePressedThisFrame(void) { return false; }
 
@@ -342,7 +356,7 @@ void CC_SetViewport(float width, float height) {
   }
 }
 
-void CC_SetErrorHandler(void (*handler)(Clay_ErrorData)) {
+void CC_SetErrorHandler(void (*handler)(CC_ErrorData)) {
   cc__error_handler_override = handler;
 }
 
