@@ -2,9 +2,6 @@
 
 Small C wrapper around [Clay](https://github.com/nicbarker/clay) for building immediate-mode UI layouts, with a raylib renderer and Jetpack Compose like syntax.
 
-> [!WARNING]
-> **Not production ready.** ccompose is under heavy development. APIs, build layout, and behavior can change without notice. Expect breakage, missing features, and rough edges. Do not use this in anything you care about yet.
-
 ## Demo Video
 
 ### Desktop
