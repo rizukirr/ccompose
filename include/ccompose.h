@@ -628,6 +628,10 @@ int CC_LoadGlobalFont(const char *path, int base_size);
  * Defaults to 0 (raylib default font). */
 int CC_GetGlobalFontId(void);
 
+int CC_LoadGlobalFontColor(const CC_Color color);
+
+CC_Color CC_GetGlobalFontColor(void);
+
 #ifndef CCOMPOSE_NO_BACKEND
 /* Load an image file from disk and upload it to the GPU as a Texture2D
  * that can be passed to the Image() macro. Thin wrapper over raylib's
@@ -1315,6 +1319,7 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
   if (style.fontSize == 0)
     style.fontSize = CC_DEFAULT_FONT_SIZE;
 
+  style.textColor = CC_GetGlobalFontColor();
   return style;
 }
 

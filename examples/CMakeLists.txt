@@ -17,5 +17,3 @@ endfunction()
 
 ccompose_add_example(ccompose_demo    demo.c)
 ccompose_add_example(ccompose_landing landing.c)
-
-add_subdirectory(muslimtify_official)

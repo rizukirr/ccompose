@@ -11,3 +11,5 @@
 **/Debug
 build**
 /.no-vibe
+.agents/
+.codex-plugins/

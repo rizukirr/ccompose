@@ -140,6 +140,7 @@ static void cc__default_error_handler(Clay_ErrorData error) {
 static Font cc__fonts[CC_MAX_FONTS];
 static int cc__font_count = 0;
 static int cc__font_global_id = 0;
+static CC_Color cc__font_global_color = ColorHex(0xFFFFFF);
 
 /* Per-frame pool of CC_ImageRef slots. ImgFill/Fit/Crop hand out slots
  * from this pool so the pointer they return outlives the call-site
@@ -197,6 +198,13 @@ int CC_LoadGlobalFont(const char *path, int base_size) {
 int CC_GetGlobalFontId(void) {
   return (cc__font_global_id >= 0) ? cc__font_global_id : 0;
 }
+
+int CC_LoadGlobalFontColor(const CC_Color color) {
+  cc__font_global_color = color;
+  return 0;
+}
+
+CC_Color CC_GetGlobalFontColor(void) { return cc__font_global_color; }
 
 int CC_LoadFont(const char *path, int base_size) {
   if (!cc__initialized || cc__font_count >= CC_MAX_FONTS)
@@ -304,6 +312,12 @@ int CC_LoadGlobalFont(const char *path, int base_size) {
   (void)base_size;
   return -1;
 }
+int CC_LoadGlobalFontColor(const CC_Color color) {
+  (void)color;
+  return 0;
+}
+CC_Color CC_GetGlobalFontColor(void) { return (CC_Color){255, 255, 255, 255}; }
+
 int CC_GetGlobalFontId(void) { return 0; }
 bool CC_Running(void) { return true; }
 bool CC__MousePressedThisFrame(void) { return false; }
