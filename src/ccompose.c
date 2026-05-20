@@ -467,6 +467,13 @@ void CC_VSpacer(void) {
                                      .height = CLAY_SIZING_FIT(0, 0)}}});
 }
 
+void CC_Spacer(CC_SpacerOpts opts) {
+  cc__leaf(CC_LEFT_TO_RIGHT,
+           (CC_ElementDeclaration){
+               .layout = {.sizing = {.width = opts.width,
+                                     .height = opts.height}}});
+}
+
 void CC_HDivider(CC_DividerOpts opts) {
   float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
   CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;

@@ -929,13 +929,28 @@ typedef struct {
   CC_Color color;
 } CC_DividerOpts;
 
+/* Spacer opts — both axes default to Fit() (zero-initialized SizingAxis is
+ * FIT since CLAY__SIZING_TYPE_FIT == 0). Override either axis with any sugar
+ * helper:
+ *
+ *     Spacer(.width = Grow());                // flexible horizontal spacer
+ *     Spacer(.height = Fixed(12));            // 12px vertical gap
+ *     Spacer(.width = Grow(), .height = Grow()); // grow on both axes
+ */
+typedef struct {
+  Clay_SizingAxis width;
+  Clay_SizingAxis height;
+} CC_SpacerOpts;
+
 void CC_HSpacer(void);
 void CC_VSpacer(void);
+void CC_Spacer(CC_SpacerOpts opts);
 void CC_HDivider(CC_DividerOpts opts);
 void CC_VDivider(CC_DividerOpts opts);
 
 #define HSpacer() CC_HSpacer()
 #define VSpacer() CC_VSpacer()
+#define Spacer(...) CC_Spacer((CC_SpacerOpts){__VA_ARGS__})
 #define HDivider(...) CC_HDivider((CC_DividerOpts){__VA_ARGS__})
 #define VDivider(...) CC_VDivider((CC_DividerOpts){__VA_ARGS__})
 
