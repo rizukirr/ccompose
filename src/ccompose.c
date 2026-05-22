@@ -282,6 +282,70 @@ bool CC__MousePressedThisFrame(void) {
   return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
+void cc__scroll_update(CC_Scroll *s, const char *id, CC_ScrollConfig cfg) {
+  if (!s || !id)
+    return;
+  float speed = cfg.wheelSpeed > 0.0f ? cfg.wheelSpeed : 40.0f;
+
+  Clay_ElementId eid = CC_SID(CC__Str(id));
+  bool hovered = Clay_PointerOver(eid);
+
+  if (cfg.wheel) {
+    Vector2 w = GetMouseWheelMoveV();
+    if (cfg.horizontal) {
+      float dx = w.x;
+      if (!cfg.vertical)
+        dx += w.y;
+      s->offset.x += dx * speed;
+    }
+    if (cfg.vertical) {
+      s->offset.y += w.y * speed;
+    }
+  }
+
+  if (cfg.drag) {
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && hovered) {
+      s->dragging = true;
+    }
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+      s->dragging = false;
+    }
+    if (s->dragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+      Vector2 d = GetMouseDelta();
+      if (cfg.horizontal)
+        s->offset.x += d.x;
+      if (cfg.vertical)
+        s->offset.y += d.y;
+    }
+  }
+
+  if (!cfg.noClamp) {
+    Clay_ScrollContainerData sc = Clay_GetScrollContainerData(eid);
+    if (sc.found) {
+      float maxX =
+          sc.contentDimensions.width - sc.scrollContainerDimensions.width;
+      float maxY =
+          sc.contentDimensions.height - sc.scrollContainerDimensions.height;
+      if (maxX < 0)
+        maxX = 0;
+      if (maxY < 0)
+        maxY = 0;
+      if (cfg.horizontal) {
+        if (s->offset.x > 0)
+          s->offset.x = 0;
+        if (s->offset.x < -maxX)
+          s->offset.x = -maxX;
+      }
+      if (cfg.vertical) {
+        if (s->offset.y > 0)
+          s->offset.y = 0;
+        if (s->offset.y < -maxY)
+          s->offset.y = -maxY;
+      }
+    }
+  }
+}
+
 CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user) {
   if (cc__draw_pool_used >= CC_DRAW_POOL_SIZE)
     return NULL;
@@ -335,6 +399,12 @@ CC_Color CC_GetGlobalFontColor(void) { return cc__font_global_color; }
 int CC_GetGlobalFontId(void) { return cc__font_global_id; }
 bool CC_Running(void) { return true; }
 bool CC__MousePressedThisFrame(void) { return false; }
+
+void cc__scroll_update(CC_Scroll *s, const char *id, CC_ScrollConfig cfg) {
+  (void)s;
+  (void)id;
+  (void)cfg;
+}
 
 static Clay_Dimensions cc__default_measure_text(Clay_StringSlice text,
                                                 Clay_TextElementConfig *config,

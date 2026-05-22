@@ -1418,6 +1418,60 @@ bool CC__MousePressedThisFrame(void);
 #define Button(id_literal, ...)                                                \
   Element(CLAY_LEFT_TO_RIGHT, id_literal, __VA_ARGS__)
 
+/* =========================================================================
+ * Scroll — input glue for .clip viewports
+ * =========================================================================
+ *
+ * Clay's .clip turns an element into a scroll viewport with a
+ * .childOffset Vector2. ccompose's job here is to drive that offset
+ * from raylib's mouse wheel and (optionally) click-and-drag input,
+ * with auto-clamping against content bounds.
+ *
+ * Usage:
+ *
+ *     static CC_Scroll s_list;
+ *
+ *     // before the layout block for this frame:
+ *     CC_ScrollUpdate(&s_list, "MyScroll",
+ *                     .horizontal = true, .drag = true, .wheel = true);
+ *
+ *     // in the layout:
+ *     Row("MyScroll",
+ *         .clip = { .horizontal = true, .childOffset = s_list.offset },
+ *         ...) {
+ *         // children must have intrinsic widths (Fixed / Fit), not Grow,
+ *         // otherwise they compress to the viewport and nothing scrolls.
+ *     }
+ *
+ * State lives in the caller-owned CC_Scroll. Offset is clamped against
+ * the element's content/viewport size reported by the *previous*
+ * frame's layout (Clay_GetScrollContainerData) — set .noClamp to opt
+ * out, e.g. when content size is unstable or you want overscroll.
+ *
+ * Headless mode (CCOMPOSE_NO_BACKEND): CC_ScrollUpdate is a no-op.
+ */
+
+typedef struct {
+  CC_Vector2 offset;   /* feed into .clip.childOffset */
+  bool       dragging; /* tracks an active press-drag (internal) */
+} CC_Scroll;
+
+typedef struct {
+  bool  horizontal; /* enable horizontal axis */
+  bool  vertical;   /* enable vertical axis */
+  bool  drag;       /* enable click-and-drag scrolling */
+  bool  wheel;      /* enable mouse-wheel scrolling */
+  float wheelSpeed; /* pixels per wheel unit (default 40) */
+  bool  noClamp;    /* skip auto-clamp against content bounds */
+} CC_ScrollConfig;
+
+void cc__scroll_update(CC_Scroll *state, const char *id,
+                       CC_ScrollConfig cfg);
+
+#define CC_ScrollUpdate(state_ptr, id_literal, ...)                            \
+  cc__scroll_update((state_ptr), (id_literal),                                 \
+                    (CC_ScrollConfig){__VA_ARGS__})
+
 #ifdef __cplusplus
 }
 #endif
