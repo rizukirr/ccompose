@@ -454,12 +454,12 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
  * centers every child; in a Column, `.x = AlignXCenter()` horizontally
  * centers every child.
  */
-#define AlignXStart()  CLAY_ALIGN_X_LEFT
+#define AlignXStart() CLAY_ALIGN_X_LEFT
 #define AlignXCenter() CLAY_ALIGN_X_CENTER
-#define AlignXEnd()    CLAY_ALIGN_X_RIGHT
-#define AlignYStart()  CLAY_ALIGN_Y_TOP
+#define AlignXEnd() CLAY_ALIGN_X_RIGHT
+#define AlignYStart() CLAY_ALIGN_Y_TOP
 #define AlignYCenter() CLAY_ALIGN_Y_CENTER
-#define AlignYEnd()    CLAY_ALIGN_Y_BOTTOM
+#define AlignYEnd() CLAY_ALIGN_Y_BOTTOM
 
 /* ChildAlign — sugar for the `.childAlignment` field. Designated init
  * so you can set one axis or both:
@@ -485,11 +485,9 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
  * literal `CC_FloatingElementConfig` directly.
  */
 #define FloatOnParent(z)                                                       \
-  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_PARENT,               \
-                              .zIndex = (z)})
+  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_PARENT, .zIndex = (z)})
 #define FloatOnRoot(z)                                                         \
-  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_ROOT,                 \
-                              .zIndex = (z)})
+  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_ROOT, .zIndex = (z)})
 
 /* ------- Clip viewport shorthands -------------------------------------
  *
@@ -512,9 +510,8 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
 #define ClipY(offset)                                                          \
   ((CC_ClipElementConfig){.vertical = true, .childOffset = (offset)})
 #define ClipXY(offset)                                                         \
-  ((CC_ClipElementConfig){.horizontal = true,                                  \
-                          .vertical = true,                                    \
-                          .childOffset = (offset)})
+  ((CC_ClipElementConfig){                                                     \
+      .horizontal = true, .vertical = true, .childOffset = (offset)})
 
 /* =========================================================================
  * Lifecycle
@@ -1279,7 +1276,7 @@ typedef struct CC__TransitionDef {
 #define DefineTransition(name, dur, ...)                                       \
   /* Enter callback: applies enter effects to target state. */                 \
   static CC_TransitionData name##__enter__(CC_TransitionData t,                \
-                                           CC_TransitionProperty p) {              \
+                                           CC_TransitionProperty p) {          \
     (void)p;                                                                   \
     CC_TransitionEffect e =                                                    \
         ((CC__TransitionDef){.duration = (dur), __VA_ARGS__}).enter;           \
@@ -1288,22 +1285,22 @@ typedef struct CC__TransitionDef {
   }                                                                            \
   /* Exit callback: applies exit effects to initial state. */                  \
   static CC_TransitionData name##__exit__(CC_TransitionData t,                 \
-                                          CC_TransitionProperty p) {               \
+                                          CC_TransitionProperty p) {           \
     (void)p;                                                                   \
     CC_TransitionEffect e =                                                    \
         ((CC__TransitionDef){.duration = (dur), __VA_ARGS__}).exit;            \
     CC__APPLY_EFFECT_(t, e);                                                   \
     return t;                                                                  \
   }                                                                            \
-  /* Config function: returns a fully built CC_TransitionElementConfig.           */  \
+  /* Config function: returns a fully built CC_TransitionElementConfig. */     \
   /* Usage: .transition = name()                                          */   \
-  static inline CC_TransitionElementConfig name(void) {                               \
+  static inline CC_TransitionElementConfig name(void) {                        \
     CC__TransitionDef d = {.duration = (dur), __VA_ARGS__};                    \
-    CC_TransitionProperty props =                                                  \
+    CC_TransitionProperty props =                                              \
         d.properties                                                           \
             ? d.properties                                                     \
             : (CC__EFFECT_PROPS_(d.enter) | CC__EFFECT_PROPS_(d.exit));        \
-    return (CC_TransitionElementConfig){                                              \
+    return (CC_TransitionElementConfig){                                       \
         .handler = d.handler ? d.handler : CC_EaseOut,                         \
         .duration = d.duration,                                                \
         .properties = props,                                                   \
@@ -1593,25 +1590,23 @@ bool CC__MousePressedThisFrame(void);
  */
 
 typedef struct {
-  CC_Vector2 offset;   /* feed into .clip.childOffset */
-  bool       dragging; /* tracks an active press-drag (internal) */
+  CC_Vector2 offset; /* feed into .clip.childOffset */
+  bool dragging;     /* tracks an active press-drag (internal) */
 } CC_Scroll;
 
 typedef struct {
-  bool  horizontal; /* enable horizontal axis */
-  bool  vertical;   /* enable vertical axis */
-  bool  drag;       /* enable click-and-drag scrolling */
-  bool  wheel;      /* enable mouse-wheel scrolling */
+  bool horizontal;  /* enable horizontal axis */
+  bool vertical;    /* enable vertical axis */
+  bool drag;        /* enable click-and-drag scrolling */
+  bool wheel;       /* enable mouse-wheel scrolling */
   float wheelSpeed; /* pixels per wheel unit (default 40) */
-  bool  noClamp;    /* skip auto-clamp against content bounds */
+  bool noClamp;     /* skip auto-clamp against content bounds */
 } CC_ScrollConfig;
 
-void CC__ScrollUpdate(CC_Scroll *state, const char *id,
-                       CC_ScrollConfig cfg);
+void CC__ScrollUpdate(CC_Scroll *state, const char *id, CC_ScrollConfig cfg);
 
 #define CC_ScrollUpdate(state_ptr, id_literal, ...)                            \
-  CC__ScrollUpdate((state_ptr), (id_literal),                                 \
-                    (CC_ScrollConfig){__VA_ARGS__})
+  CC__ScrollUpdate((state_ptr), (id_literal), (CC_ScrollConfig){__VA_ARGS__})
 
 #ifdef __cplusplus
 }

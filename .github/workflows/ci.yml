@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format 22
+        run: |
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y clang-format-22
+
+      - name: Check formatting
+        run: |
+          shopt -s globstar nullglob
+          files=(
+            src/**/*.c src/**/*.h
+            include/ccompose.h
+            examples/**/*.c
+            tests/**/*.c
+          )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No files to check"; exit 0
+          fi
+          clang-format-22 --dry-run --Werror "${files[@]}"
+
+  analyze:
+    name: cppcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,performance,portability \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --suppress='*:include/clay.h' \
+            --suppress='*:external/*' \
+            --suppress='*:renderer/raylib/*' \
+            --error-exitcode=1 \
+            --std=c11 \
+            -I include -I renderer/raylib \
+            src/ examples/ tests/
+
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (gcc)
+            os: ubuntu-latest
+            cc: gcc
+          - name: Linux (clang)
+            os: ubuntu-latest
+            cc: clang
+          - name: macOS (clang)
+            os: macos-latest
+            cc: clang
+          - name: Windows (MSVC)
+            os: windows-latest
+            cc: cl
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCCOMPOSE_INSTALL=OFF
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Test (headless)
+        shell: bash
+        run: |
+          cmake -S . -B build-headless -DCMAKE_BUILD_TYPE=Release -DCCOMPOSE_BACKEND_RAYLIB=OFF
+          cmake --build build-headless --config Release -j
+          ctest --test-dir build-headless --output-on-failure -C Release
+
+  web:
+    name: Web (Emscripten)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Configure
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build-web -j

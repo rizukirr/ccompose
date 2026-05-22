@@ -27,7 +27,7 @@ option(CCOMPOSE_WARNINGS_AS_ERRORS
 # and isn't in an export set, so install(EXPORT) would fail.
 cmake_dependent_option(CCOMPOSE_INSTALL
     "Generate install targets and package config" ON
-    "PROJECT_IS_TOP_LEVEL;NOT EMSCRIPTEN" OFF)
+    "PROJECT_IS_TOP_LEVEL;NOT EMSCRIPTEN;NOT CMAKE_CROSSCOMPILING" OFF)
 
 # Emscripten auto-detected via CMAKE_TOOLCHAIN_FILE=<emsdk>/.../Emscripten.cmake.
 # When building for web we swap raylib's platform and use emscripten_set_main_loop
