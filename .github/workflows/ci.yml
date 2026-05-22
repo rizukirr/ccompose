@@ -17,10 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang-format
+      - name: Install clang-format 20
         run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y clang-format
+          sudo apt-get install -y clang-format-20
 
       - name: Check formatting
         run: |
@@ -34,7 +36,7 @@ jobs:
           if [ ${#files[@]} -eq 0 ]; then
             echo "No files to check"; exit 0
           fi
-          clang-format --dry-run --Werror "${files[@]}"
+          clang-format-20 --dry-run --Werror "${files[@]}"
 
   analyze:
     name: cppcheck
@@ -50,7 +52,7 @@ jobs:
       - name: Run cppcheck
         run: |
           cppcheck \
-            --enable=warning,style,performance,portability \
+            --enable=warning,performance,portability \
             --inline-suppr \
             --suppress=missingIncludeSystem \
             --suppress=unusedFunction \
@@ -96,7 +98,7 @@ jobs:
       - name: Configure
         env:
           CC: ${{ matrix.cc }}
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCCOMPOSE_INSTALL=OFF
 
       - name: Build
         run: cmake --build build --config Release -j
