@@ -135,7 +135,7 @@ static void NavEntry(const char *id, Page p) {
   Button(id,
          .layout = {.sizing = {Grow(), Fit()},
                     .padding = PadSymmetric(14, 10),
-                    .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
+                    .childAlignment = ChildAlign(.y = AlignYCenter())},
          .backgroundColor = bg,
          .cornerRadius    = RadiusAll(8)) {
     Text(page_title(p),
@@ -164,8 +164,8 @@ static void FeatureCard(const char *id, const char *title, const char *body) {
 static void SizedBlock(const char *id, const char *label, Clay_SizingAxis w) {
   Column(id,
          .layout = {.sizing = {w, Fixed(48)},
-                    .childAlignment = {.x = CC_ALIGN_X_CENTER,
-                                       .y = CC_ALIGN_Y_CENTER}},
+                    .childAlignment = ChildAlign(.x = AlignXCenter(),
+                                                 .y = AlignYCenter())},
          .backgroundColor = COLOR_ACCENT_DIM,
          .cornerRadius    = RadiusAll(6)) {
     Text(label, .fontSize = 13, .textColor = COLOR_TEXT);
@@ -238,7 +238,7 @@ static void render_layout(void) {
 static void render_interact(void) {
   Row("ButtonRow",
       .layout = {.sizing = {Grow(), Fit()}, .childGap = 12,
-                 .childAlignment = {.y = CC_ALIGN_Y_CENTER}}) {
+                 .childAlignment = ChildAlign(.y = AlignYCenter())}) {
 
     /* Primary — filled accent, darkens on press. */
     CC_Color primary_bg = CC_Clicked("BtnPrimary") ? COLOR_PRESSED
@@ -246,8 +246,8 @@ static void render_interact(void) {
                                                    : COLOR_ACCENT_DIM;
     Button("BtnPrimary",
            .layout = {.padding = PadSymmetric(18, 10),
-                      .childAlignment = {.x = CC_ALIGN_X_CENTER,
-                                         .y = CC_ALIGN_Y_CENTER}},
+                      .childAlignment = ChildAlign(.x = AlignXCenter(),
+                                                   .y = AlignYCenter())},
            .backgroundColor = primary_bg,
            .cornerRadius    = RadiusAll(8)) {
       Text("Primary", .fontSize = 14, .textColor = COLOR_TEXT);
@@ -279,7 +279,7 @@ static void render_interact(void) {
     /* No border with RadiusAll(999) — see VersionPill above. */
     Button("BtnToggle",
            .layout = {.padding = PadSymmetric(18, 10), .childGap = 10,
-                      .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
+                      .childAlignment = ChildAlign(.y = AlignYCenter())},
            .backgroundColor = toggle_compact_mode ? COLOR_ACCENT_DIM
                                                   : COLOR_SURFACE_2,
            .cornerRadius    = RadiusAll(999)) {
@@ -322,7 +322,7 @@ static void render_scroll(void) {
   int card_count = (int)(sizeof(titles)/sizeof(titles[0]));
 
   Row("Carousel",
-      .clip   = {.horizontal = true, .childOffset = carousel_scroll.offset},
+      .clip   = ClipX(carousel_scroll.offset),
       .layout = {.sizing = {Grow(), Fit()}, .childGap = 12}) {
     for (int i = 0; i < card_count; i++) {
       char id[24];
@@ -347,7 +347,7 @@ static void render_trans(void) {
 
   Row("TransControls",
       .layout = {.sizing = {Grow(), Fit()}, .childGap = 12,
-                 .childAlignment = {.y = CC_ALIGN_Y_CENTER}}) {
+                 .childAlignment = ChildAlign(.y = AlignYCenter())}) {
     Button("BtnNotifToggle",
            .layout = {.padding = PadSymmetric(18, 10)},
            .backgroundColor =
@@ -372,7 +372,7 @@ static void render_trans(void) {
         .transition = notif_anim(),
         .layout = {.sizing = {Grow(), Fit()},
                    .padding = PadAll(16), .childGap = 12,
-                   .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
+                   .childAlignment = ChildAlign(.y = AlignYCenter())},
         .backgroundColor = COLOR_ACCENT_DIM,
         .cornerRadius    = RadiusAll(10),
         .border          = {.color = COLOR_ACCENT, .width = BorderAll(1)}) {
@@ -398,7 +398,7 @@ static void frame(void) {
 
   CC_Begin();
   Column("Root",
-         .layout = {.sizing = {Grow(), Grow()},
+         .layout = {.sizing = SizingAll(Grow()),
                     .padding = PadAll(20),
                     .childGap = 16},
          .backgroundColor = COLOR_BG) {
@@ -409,7 +409,7 @@ static void frame(void) {
     DrawRow("Header", paint_canvas, &canvas_state,
             .layout = {.sizing = {Grow(), Fixed(140)},
                        .padding = PadAll(20), .childGap = 14,
-                       .childAlignment = {.y = CC_ALIGN_Y_CENTER}},
+                       .childAlignment = ChildAlign(.y = AlignYCenter())},
             .cornerRadius = RadiusAll(12),
             .border       = {.color = COLOR_BORDER, .width = BorderAll(1)}) {
       if (avatar_tex && avatar_tex->id != 0) {
@@ -419,8 +419,8 @@ static void frame(void) {
       } else {
         Box("AvatarFallback",
             .layout = {.sizing = {Fixed(64), Fixed(64)},
-                       .childAlignment = {.x = CC_ALIGN_X_CENTER,
-                                          .y = CC_ALIGN_Y_CENTER}},
+                       .childAlignment = ChildAlign(.x = AlignXCenter(),
+                                                    .y = AlignYCenter())},
             .backgroundColor = COLOR_ACCENT,
             .cornerRadius    = RadiusAll(999)) {
           Text("cc", .fontSize = 24, .textColor = COLOR_BG);
@@ -446,7 +446,7 @@ static void frame(void) {
 
     /* Body — sidebar + content. */
     Row("Body",
-        .layout = {.sizing = {Grow(), Grow()}, .childGap = 16}) {
+        .layout = {.sizing = SizingAll(Grow()), .childGap = 16}) {
 
       Column("Sidebar",
              .layout = {.sizing = {Fixed(220), Grow()},
@@ -467,7 +467,7 @@ static void frame(void) {
       }
 
       Column("Content",
-             .layout = {.sizing = {Grow(), Grow()},
+             .layout = {.sizing = SizingAll(Grow()),
                         .padding = PadAll(22), .childGap = 14},
              .backgroundColor = COLOR_SURFACE,
              .cornerRadius    = RadiusAll(12),
