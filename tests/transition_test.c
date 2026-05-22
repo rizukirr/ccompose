@@ -55,7 +55,7 @@ DefineTransition(mixed, 0.4f,
 static void test_slide_fade_config(void) {
     printf("  slide_fade config... ");
 
-    CC_TransitionConfig cfg = slide_fade();
+    CC_TransitionElementConfig cfg = slide_fade();
 
     assert(cfg.handler == CC_EaseOut);
     assert(APPROX(cfg.duration, 0.4f));
@@ -70,7 +70,7 @@ static void test_slide_fade_config(void) {
 static void test_enter_callback(void) {
     printf("  enter callback... ");
 
-    CC_TransitionConfig cfg = slide_fade();
+    CC_TransitionElementConfig cfg = slide_fade();
     CC_TransitionData target = {
         .boundingBox = { .x = 100, .y = 50, .width = 200, .height = 100 },
         .backgroundColor = { 30, 30, 30, 255 },
@@ -90,7 +90,7 @@ static void test_enter_callback(void) {
 static void test_exit_callback(void) {
     printf("  exit callback... ");
 
-    CC_TransitionConfig cfg = slide_fade();
+    CC_TransitionElementConfig cfg = slide_fade();
     CC_TransitionData initial = {
         .boundingBox = { .x = 100, .y = 50, .width = 200, .height = 100 },
         .backgroundColor = { 30, 30, 30, 255 },
@@ -108,7 +108,7 @@ static void test_exit_callback(void) {
 static void test_color_anim_config(void) {
     printf("  color_anim config... ");
 
-    CC_TransitionConfig cfg = color_anim();
+    CC_TransitionElementConfig cfg = color_anim();
 
     assert(cfg.properties == CC_TRANSITION_PROPERTY_BACKGROUND_COLOR);
     assert(cfg.enter.setInitialState != NULL);
@@ -128,7 +128,7 @@ static void test_color_anim_config(void) {
 static void test_custom_handler(void) {
     printf("  custom handler... ");
 
-    CC_TransitionConfig cfg = linear_slide();
+    CC_TransitionElementConfig cfg = linear_slide();
 
     assert(cfg.handler == CC_Linear);
     assert(APPROX(cfg.duration, 0.3f));
@@ -140,7 +140,7 @@ static void test_custom_handler(void) {
 static void test_exit_only(void) {
     printf("  exit-only... ");
 
-    CC_TransitionConfig cfg = exit_only();
+    CC_TransitionElementConfig cfg = exit_only();
 
     assert(cfg.enter.setInitialState == NULL);
     assert(cfg.exit.setFinalState != NULL);
@@ -153,7 +153,7 @@ static void test_exit_only(void) {
 static void test_mixed_config(void) {
     printf("  mixed presets + raw... ");
 
-    CC_TransitionConfig cfg = mixed();
+    CC_TransitionElementConfig cfg = mixed();
 
     assert(cfg.properties & CC_TRANSITION_PROPERTY_X);
     assert(cfg.properties & CC_TRANSITION_PROPERTY_BACKGROUND_COLOR);

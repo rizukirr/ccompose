@@ -137,7 +137,7 @@ static void frame(void) {
            .fontSize = 22, .wrapMode = CC_TEXT_WRAP_WORDS);
 
       Box("Pill",
-          .layout = {.padding = Pad(20, 20, 10, 10),
+          .layout = {.padding = PadSymmetric(20, 10),
                      .childAlignment = {.x = CC_ALIGN_X_CENTER,
                                         .y = CC_ALIGN_Y_CENTER}},
           .backgroundColor = {255, 255, 255, 18},
