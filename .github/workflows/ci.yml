@@ -17,12 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang-format 21
+      - name: Install clang-format 22
         run: |
           wget -qO llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
-          sudo ./llvm.sh 21
-          sudo apt-get install -y clang-format-21
+          sudo ./llvm.sh 22
+          sudo apt-get install -y clang-format-22
 
       - name: Check formatting
         run: |
@@ -36,7 +36,7 @@ jobs:
           if [ ${#files[@]} -eq 0 ]; then
             echo "No files to check"; exit 0
           fi
-          clang-format-21 --dry-run --Werror "${files[@]}"
+          clang-format-22 --dry-run --Werror "${files[@]}"
 
   analyze:
     name: cppcheck
