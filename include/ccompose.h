@@ -189,6 +189,15 @@ extern "C" {
 #define CC_ATTACH_TO_PARENT CLAY_ATTACH_TO_PARENT
 #define CC_ATTACH_TO_ELEMENT_WITH_ID CLAY_ATTACH_TO_ELEMENT_WITH_ID
 #define CC_ATTACH_TO_ROOT CLAY_ATTACH_TO_ROOT
+#define CC_ATTACH_POINT_LEFT_TOP CLAY_ATTACH_POINT_LEFT_TOP
+#define CC_ATTACH_POINT_LEFT_CENTER CLAY_ATTACH_POINT_LEFT_CENTER
+#define CC_ATTACH_POINT_LEFT_BOTTOM CLAY_ATTACH_POINT_LEFT_BOTTOM
+#define CC_ATTACH_POINT_CENTER_TOP CLAY_ATTACH_POINT_CENTER_TOP
+#define CC_ATTACH_POINT_CENTER_CENTER CLAY_ATTACH_POINT_CENTER_CENTER
+#define CC_ATTACH_POINT_CENTER_BOTTOM CLAY_ATTACH_POINT_CENTER_BOTTOM
+#define CC_ATTACH_POINT_RIGHT_TOP CLAY_ATTACH_POINT_RIGHT_TOP
+#define CC_ATTACH_POINT_RIGHT_CENTER CLAY_ATTACH_POINT_RIGHT_CENTER
+#define CC_ATTACH_POINT_RIGHT_BOTTOM CLAY_ATTACH_POINT_RIGHT_BOTTOM
 #define CC_ClipElementConfig Clay_ClipElementConfig
 #define CC_AspectRatioElementConfig Clay_AspectRatioElementConfig
 #define CC_BorderElementConfig Clay_BorderElementConfig
@@ -485,9 +494,9 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
  * literal `CC_FloatingElementConfig` directly.
  */
 #define FloatOnParent(z)                                                       \
-  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_PARENT, .zIndex = (z)})
+  ((CC_FloatingElementConfig){.attachTo = CC_ATTACH_TO_PARENT, .zIndex = (z)})
 #define FloatOnRoot(z)                                                         \
-  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_ROOT, .zIndex = (z)})
+  ((CC_FloatingElementConfig){.attachTo = CC_ATTACH_TO_ROOT, .zIndex = (z)})
 
 /* ------- Clip viewport shorthands -------------------------------------
  *
