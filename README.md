@@ -27,8 +27,8 @@ int main(void) {
                .layout = { .sizing = { Grow(), Grow() },
                            .padding = PadAll(24),
                            .childGap = 12,
-                           .childAlignment = { .x = AlignCenter(),
-                                               .y = AlignMiddle() } },
+                           .childAlignment = { .x = AlignXCenter(),
+                                               .y = AlignYCenter() } },
                .backgroundColor = Color(18, 18, 20, 255)) {
 
             Text("Hello, ccompose!",
