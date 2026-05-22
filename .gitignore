@@ -1,15 +1,10 @@
-/.omc
-**/.omc
-/.omx
-**/.omx
 /build
 /external/clay
-**/superpowers/**
 /compile_commands.json
-/.codex
 /external/nanosvg
 **/Debug
 build**
 /.no-vibe
 .agents/
-.codex-plugins/
+.claude/
+CLAUDE.md
