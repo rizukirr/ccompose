@@ -97,6 +97,26 @@ sudo apt install libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcu
 sudo dnf install mesa-libGL-devel libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel
 ```
 
+### macOS
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+raylib is auto-fetched from source if not installed. To use a system raylib:
+
+```bash
+brew install raylib
+```
+
+Xcode Command Line Tools (`xcode-select --install`) supply Clang and the SDK headers; no extra packages are required. Apple Silicon and Intel are both supported. For a universal binary:
+
+```bash
+cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build build
+```
+
 ### Windows
 
 The simplest path is raylib via [vcpkg](https://vcpkg.io):
@@ -113,6 +133,22 @@ cmake --build build --config Debug
 If you skip the vcpkg step, CMake will fall back to downloading raylib 5.5 from source automatically - no extra system packages needed on Windows (MSVC alone is enough).
 
 You can override the fetched raylib version with `-DCCOMPOSE_RAYLIB_VERSION=5.0` if needed.
+
+### Cross-compile Linux → Windows (MinGW-w64)
+
+A toolchain file is included for building Windows `.exe`s from Linux:
+
+```bash
+# Arch: sudo pacman -S mingw-w64-gcc
+# Debian/Ubuntu: sudo apt install mingw-w64
+
+cmake -S . -B build-win \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build-win -j
+```
+
+Resulting `.exe`s can be run under Wine for smoke-testing.
 
 ## Test
 
