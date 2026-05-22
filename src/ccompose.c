@@ -40,7 +40,7 @@ static void (*cc__error_handler_override)(CC_ErrorData) = NULL;
  * anything ends up drawing them. Kept here (not in the raylib block) so
  * headless builds can store and read them too. */
 static CC_Color cc__background_color = {0, 0, 0, 255};
-static CC_Color cc__font_global_color = ColorHex(0xFFFFFF);
+static CC_Color cc__font_global_color = {255.0f, 255.0f, 255.0f, 255.0f};
 static int cc__font_global_id = 0;
 
 typedef struct {

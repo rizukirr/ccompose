@@ -17,12 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang-format 20
+      - name: Install clang-format 21
         run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
-          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
-          sudo apt-get update
-          sudo apt-get install -y clang-format-20
+          wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get install -y clang-format-21
 
       - name: Check formatting
         run: |
@@ -36,7 +36,7 @@ jobs:
           if [ ${#files[@]} -eq 0 ]; then
             echo "No files to check"; exit 0
           fi
-          clang-format-20 --dry-run --Werror "${files[@]}"
+          clang-format-21 --dry-run --Werror "${files[@]}"
 
   analyze:
     name: cppcheck
