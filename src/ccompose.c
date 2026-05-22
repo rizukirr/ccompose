@@ -204,7 +204,7 @@ int CC_GetGlobalFontId(void) {
   return (cc__font_global_id >= 0) ? cc__font_global_id : 0;
 }
 
-int CC_LoadGlobalFontColor(const CC_Color color) {
+int CC_SetGlobalFontColor(CC_Color color) {
   cc__font_global_color = color;
   return 0;
 }
@@ -282,7 +282,7 @@ bool CC__MousePressedThisFrame(void) {
   return IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
-void cc__scroll_update(CC_Scroll *s, const char *id, CC_ScrollConfig cfg) {
+void CC__ScrollUpdate(CC_Scroll *s, const char *id, CC_ScrollConfig cfg) {
   if (!s || !id)
     return;
   float speed = cfg.wheelSpeed > 0.0f ? cfg.wheelSpeed : 40.0f;
@@ -390,7 +390,7 @@ int CC_LoadGlobalFont(const char *path, int base_size) {
   (void)base_size;
   return -1;
 }
-int CC_LoadGlobalFontColor(const CC_Color color) {
+int CC_SetGlobalFontColor(CC_Color color) {
   cc__font_global_color = color;
   return 0;
 }
@@ -400,7 +400,7 @@ int CC_GetGlobalFontId(void) { return cc__font_global_id; }
 bool CC_Running(void) { return true; }
 bool CC__MousePressedThisFrame(void) { return false; }
 
-void cc__scroll_update(CC_Scroll *s, const char *id, CC_ScrollConfig cfg) {
+void CC__ScrollUpdate(CC_Scroll *s, const char *id, CC_ScrollConfig cfg) {
   (void)s;
   (void)id;
   (void)cfg;
@@ -548,7 +548,7 @@ void CC_HDivider(CC_DividerOpts opts) {
   float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
   CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;
   Clay_SizingAxis w =
-      opts.size > 0.0f ? CLAY_SIZING_FIXED(opts.size) : CLAY_SIZING_GROW(0, 0);
+      opts.length > 0.0f ? CLAY_SIZING_FIXED(opts.length) : CLAY_SIZING_GROW(0, 0);
   cc__leaf(
       CC_LEFT_TO_RIGHT,
       (CC_ElementDeclaration){
@@ -560,7 +560,7 @@ void CC_VDivider(CC_DividerOpts opts) {
   float t = opts.thickness > 0.0f ? opts.thickness : 1.0f;
   CC_Color c = (opts.color.a == 0) ? CC_DividerDefaultColor : opts.color;
   Clay_SizingAxis h =
-      opts.size > 0.0f ? CLAY_SIZING_FIXED(opts.size) : CLAY_SIZING_GROW(0, 0);
+      opts.length > 0.0f ? CLAY_SIZING_FIXED(opts.length) : CLAY_SIZING_GROW(0, 0);
   cc__leaf(
       CC_TOP_TO_BOTTOM,
       (CC_ElementDeclaration){

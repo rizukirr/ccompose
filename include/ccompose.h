@@ -60,8 +60,12 @@
  * -------------------------------------------------------------------------
  *
  *   Type aliases        CC_Decl, CC_TextStyle, CC_RenderCommandArray, ...
- *   Sugar               Fit(), Grow(), Fixed(), Percent(), PadAll(), Pad(),
- *                       RadiusAll(), Color(), AlignStart/Center/End, etc.
+ *   Sugar               Fit(), Grow(), Fixed(), Percent(), PadAll(),
+ *                       PadSymmetric(), PadOnly(), BorderAll(),
+ *                       BorderSymmetric(), BorderOnly(), RadiusAll(),
+ *                       RadiusTopBottom(), RadiusLeftRight(), RadiusOnly(),
+ *                       Color(), ColorHex(),
+ *                       AlignXStart/Center/End, AlignYStart/Center/End,
  *   Lifecycle           CC_Init, CC_Begin, CC_End, CC_Running, CC_Shutdown
  *                       CC_SetWindow, CC_SetWindowFlags, CC_SetBackground,
  *                       CC_SetErrorHandler, CC_LoadFont, CC_SetViewport
@@ -149,6 +153,7 @@ extern "C" {
 #define CC_LEFT_TO_RIGHT CLAY_LEFT_TO_RIGHT
 #define CC_TOP_TO_BOTTOM CLAY_TOP_TO_BOTTOM
 #define CC_Sizing Clay_Sizing
+#define CC_SizingAxis Clay_SizingAxis
 #define CC_SizingType Clay__SizingType
 #define CC_SIZING_TYPE_FIT CLAY__SIZING_TYPE_FIT
 #define CC_SIZING_TYPE_GROW CLAY__SIZING_TYPE_GROW
@@ -169,12 +174,21 @@ extern "C" {
 #define CC_TEXT_WRAP_NEWLINES CLAY_TEXT_WRAP_NEWLINES
 #define CC_TEXT_WRAP_NONE CLAY_TEXT_WRAP_NONE
 #define CC_TextElementConfigWrapMode Clay_TextElementConfigWrapMode
+#define CC_TextAlignment Clay_TextAlignment
+#define CC_TEXT_ALIGN_LEFT CLAY_TEXT_ALIGN_LEFT
+#define CC_TEXT_ALIGN_CENTER CLAY_TEXT_ALIGN_CENTER
+#define CC_TEXT_ALIGN_RIGHT CLAY_TEXT_ALIGN_RIGHT
 #define CC_BoundingBox Clay_BoundingBox
 
 /* Per-feature config structs (the designated-initializer fields on
  * CC_ElementDeclaration). */
 #define CC_ImageElementConfig Clay_ImageElementConfig
 #define CC_FloatingElementConfig Clay_FloatingElementConfig
+#define CC_FloatingAttachToElement Clay_FloatingAttachToElement
+#define CC_ATTACH_TO_NONE CLAY_ATTACH_TO_NONE
+#define CC_ATTACH_TO_PARENT CLAY_ATTACH_TO_PARENT
+#define CC_ATTACH_TO_ELEMENT_WITH_ID CLAY_ATTACH_TO_ELEMENT_WITH_ID
+#define CC_ATTACH_TO_ROOT CLAY_ATTACH_TO_ROOT
 #define CC_ClipElementConfig Clay_ClipElementConfig
 #define CC_AspectRatioElementConfig Clay_AspectRatioElementConfig
 #define CC_BorderElementConfig Clay_BorderElementConfig
@@ -205,10 +219,10 @@ CC_String CC_StrIntern(const char *s);
 #define CC_RENDER_COMMAND_TYPE_CUSTOM CLAY_RENDER_COMMAND_TYPE_CUSTOM
 
 /* Transition types. */
-#define CC_TransitionConfig Clay_TransitionElementConfig
+#define CC_TransitionElementConfig Clay_TransitionElementConfig
 #define CC_TransitionData Clay_TransitionData
 #define CC_TransitionArgs Clay_TransitionCallbackArguments
-#define CC_TransitionProp Clay_TransitionProperty
+#define CC_TransitionProperty Clay_TransitionProperty
 #define CC_TransitionState Clay_TransitionState
 #define CC_TransitionEnterTrigger Clay_TransitionEnterTriggerType
 #define CC_TransitionExitTrigger Clay_TransitionExitTriggerType
@@ -284,6 +298,17 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
 /* Runtime string-id constructor from a CC_String. */
 #define CC_SID CLAY_SID
 
+/* Index-offset element id — hash a (label, index) pair into a unique
+ * CC_ElementId. Useful for list rows and grid cells without having to
+ * snprintf a unique string per iteration:
+ *
+ *     for (int i = 0; i < count; ++i) {
+ *         if (Clay_PointerOver(CC_IDI("row", i))) ...;
+ *     }
+ *
+ * The label must be a string literal (uses CLAY_STRING). */
+#define CC_IDI(label, index) CLAY_IDI(label, index)
+
 /* =========================================================================
  * Sugar — sizing, padding, color, alignment
  * =========================================================================
@@ -320,43 +345,86 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
 #define Fixed(n) CLAY_SIZING_FIXED(n)
 #define Percent(p) CLAY_SIZING_PERCENT(p)
 
+/* Sizing struct sugar — collapses `.sizing = { Grow(), Grow() }` to
+ * `SizingAll(Grow())` for the common both-axes-same case.
+ *
+ *   SizingAll(s)            — both width and height use sizing s.
+ *   SizingOnly(.width = ..., .height = ...) — designated init;
+ *                             unspecified axis defaults to Fit().
+ */
+#define SizingAll(s) ((CC_Sizing){(s), (s)})
+#define SizingOnly(...) ((CC_Sizing){__VA_ARGS__})
+
 /* ------- Padding --------------------------------------------------------
  *
- * Used as the `.padding` of a `CC_LayoutConfig`.
+ * Used as the `.padding` of a `CC_LayoutConfig`. Inspired by Flutter's
+ * EdgeInsets — three helpers cover every shape:
  *
- *   PadAll(n)            — n pixels on all four sides.
- *   Pad(l, r, t, b)      — per-side padding, in (left, right, top, bottom)
- *                          order (note: NOT the CSS T/R/B/L convention).
+ *   PadAll(n)              — n pixels on all four sides.
+ *   PadSymmetric(h, v)     — h on left/right, v on top/bottom.
+ *   PadOnly(.left = 8,     — designated init; unspecified sides default
+ *           .top  = 4)       to 0. Use for arbitrary per-side padding.
  *
  * Padding stacks inside the element's bounding box — it eats into the
  * available space for children, it does not grow the box.
  */
 #define PadAll(n) CLAY_PADDING_ALL(n)
-#define Pad(l, r, t, b) ((CC_Padding){(l), (r), (t), (b)})
+#define PadSymmetric(h, v) ((CC_Padding){(h), (h), (v), (v)})
+#define PadOnly(...) ((CC_Padding){__VA_ARGS__})
 
-/* ------- Color & rounding ----------------------------------------------
+/* ------- Border width ---------------------------------------------------
  *
- *   Color(r, g, b, a)    — a CC_Color literal. Channels are 0–255,
- *                          alpha included. Example:
- *                              .backgroundColor = Color(24, 24, 24, 255)
+ * Used as the `.width` of a `CC_BorderElementConfig`. Same three-helper
+ * shape as padding, plus a `.betweenChildren` slot that Clay uses to
+ * draw dividers between siblings along the parent's layout direction.
  *
- *   ColorHex(rgb)        — a CC_Color from a 0xRRGGBB hex literal, with
- *                          alpha forced to 255 (fully opaque). Example:
- *                              .backgroundColor = ColorHex(0x1E1E22)
+ *   BorderAll(n)           — n pixels on all four sides, no
+ *                            between-children divider.
+ *   BorderSymmetric(h, v)  — h on left/right, v on top/bottom, no
+ *                            between-children divider.
+ *   BorderOnly(.left = 1,  — designated init; unspecified default to 0.
+ *              .betweenChildren = 1)
  *
- *   ColorHexA(rgba)      — a CC_Color from a 0xRRGGBBAA hex literal that
- *                          includes the alpha channel in the bottom byte.
- *                          Example:
- *                              .overlayColor = ColorHexA(0x00000020)
+ * Color is set separately on the same `.border` config:
  *
- *   RadiusAll(n)         — a CC_CornerRadius with all four corners = n.
- *                          Use large values (e.g. 999) for a pill/circle.
- *                          For per-corner control write the literal by
- *                          hand:
- *                              .cornerRadius = (CC_CornerRadius){
- *                                  .topLeft = 8, .topRight = 8 }
+ *     .border = { .color = COLOR_BORDER, .width = BorderAll(1) }
+ */
+#define BorderAll(n) ((CC_BorderWidth){(n), (n), (n), (n), 0})
+#define BorderSymmetric(h, v) ((CC_BorderWidth){(h), (h), (v), (v), 0})
+#define BorderOnly(...) ((CC_BorderWidth){__VA_ARGS__})
+
+/* ------- Corner radius -------------------------------------------------
+ *
+ *   RadiusAll(n)           — all four corners = n. Use large values
+ *                            (e.g. 999) for a pill/circle shape.
+ *   RadiusTopBottom(t, b)  — top corners = t, bottom corners = b.
+ *                            Useful for cards with a rounded top edge
+ *                            and a flat bottom.
+ *   RadiusLeftRight(l, r)  — left corners = l, right corners = r.
+ *   RadiusOnly(.topLeft = 8,
+ *              .topRight = 8) — designated init; unspecified corners
+ *                            default to 0.
  */
 #define RadiusAll(n) CLAY_CORNER_RADIUS(n)
+#define RadiusTopBottom(t, b) ((CC_CornerRadius){(t), (t), (b), (b)})
+#define RadiusLeftRight(l, r) ((CC_CornerRadius){(l), (r), (l), (r)})
+#define RadiusOnly(...) ((CC_CornerRadius){__VA_ARGS__})
+
+/* ------- Color ---------------------------------------------------------
+ *
+ *   Color(r, g, b, a)      — a CC_Color literal. Channels are 0–255,
+ *                            alpha included. Example:
+ *                              .backgroundColor = Color(24, 24, 24, 255)
+ *
+ *   ColorHex(rgb)          — a CC_Color from a 0xRRGGBB hex literal,
+ *                            with alpha forced to 255 (fully opaque):
+ *                              .backgroundColor = ColorHex(0x1E1E22)
+ *
+ *   ColorHexA(rgba)        — a CC_Color from a 0xRRGGBBAA hex literal
+ *                            that includes the alpha channel in the
+ *                            bottom byte:
+ *                              .overlayColor = ColorHexA(0x00000020)
+ */
 #define Color(r, g, b, a) ((CC_Color){(r), (g), (b), (a)})
 #define ColorHex(rgb)                                                          \
   ((CC_Color){(float)(((uint32_t)(rgb) >> 16) & 0xFFu),                        \
@@ -372,23 +440,81 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
  *
  * Used as the `.childAlignment` of a CC_LayoutConfig, e.g.
  *
- *     .layout = { .childAlignment = { .x = AlignCenter(),
- *                                     .y = AlignMiddle() } }
+ *     .layout = { .childAlignment = { .x = AlignXCenter(),
+ *                                     .y = AlignYCenter() } }
  *
- *   Horizontal (x):  AlignStart | AlignCenter | AlignEnd
- *   Vertical   (y):  AlignTop   | AlignMiddle | AlignBottom
+ *   Horizontal (x):  AlignXStart | AlignXCenter | AlignXEnd
+ *   Vertical   (y):  AlignYStart | AlignYCenter | AlignYEnd
+ *
+ * Names are axis-tagged so they can't be silently mixed up — assigning
+ * a Y-axis value to `.x` is a compile-time type mismatch.
  *
  * Alignment applies to children as a group along the cross-axis of the
- * parent's layout direction. In a Row, `.y = AlignMiddle()` vertically
- * centers every child; in a Column, `.x = AlignCenter()` horizontally
+ * parent's layout direction. In a Row, `.y = AlignYCenter()` vertically
+ * centers every child; in a Column, `.x = AlignXCenter()` horizontally
  * centers every child.
  */
-#define AlignStart() CLAY_ALIGN_X_LEFT
-#define AlignCenter() CLAY_ALIGN_X_CENTER
-#define AlignEnd() CLAY_ALIGN_X_RIGHT
-#define AlignTop() CLAY_ALIGN_Y_TOP
-#define AlignMiddle() CLAY_ALIGN_Y_CENTER
-#define AlignBottom() CLAY_ALIGN_Y_BOTTOM
+#define AlignXStart()  CLAY_ALIGN_X_LEFT
+#define AlignXCenter() CLAY_ALIGN_X_CENTER
+#define AlignXEnd()    CLAY_ALIGN_X_RIGHT
+#define AlignYStart()  CLAY_ALIGN_Y_TOP
+#define AlignYCenter() CLAY_ALIGN_Y_CENTER
+#define AlignYEnd()    CLAY_ALIGN_Y_BOTTOM
+
+/* ChildAlign — sugar for the `.childAlignment` field. Designated init
+ * so you can set one axis or both:
+ *
+ *     .layout = { .childAlignment = ChildAlign(.x = AlignXCenter(),
+ *                                              .y = AlignYCenter()) }
+ *
+ * Unspecified axis defaults to the Start of that axis (X = left,
+ * Y = top), matching Clay's default.
+ */
+#define ChildAlign(...) ((CC_ChildAlignment){__VA_ARGS__})
+
+/* ------- Floating shorthands ------------------------------------------
+ *
+ * Sugar for the two most common `.floating` patterns: overlay anchored
+ * to the immediate parent (background image, badge), and overlay
+ * anchored to the root (modal, app-level toast).
+ *
+ *   FloatOnParent(z)  — attach to parent at z-index z.
+ *   FloatOnRoot(z)    — attach to root at z-index z.
+ *
+ * For attach-to-by-id, custom attach points, or offsets, write the
+ * literal `CC_FloatingElementConfig` directly.
+ */
+#define FloatOnParent(z)                                                       \
+  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_PARENT,               \
+                              .zIndex = (z)})
+#define FloatOnRoot(z)                                                         \
+  ((CC_FloatingElementConfig){.attachTo = CLAY_ATTACH_TO_ROOT,                 \
+                              .zIndex = (z)})
+
+/* ------- Clip viewport shorthands -------------------------------------
+ *
+ * Sugar for the `.clip` field that turns an element into a scroll
+ * viewport on one or both axes.
+ *
+ *   ClipX(offset)   — horizontal scroll, .childOffset = offset.
+ *   ClipY(offset)   — vertical scroll, .childOffset = offset.
+ *   ClipXY(offset)  — both axes, .childOffset = offset.
+ *
+ * `offset` is a CC_Vector2. Pair with a CC_Scroll state and
+ * CC_ScrollUpdate to drive the offset from mouse wheel + drag:
+ *
+ *     CC_ScrollUpdate(&s, "List",
+ *                     .vertical = true, .wheel = true, .drag = true);
+ *     Column("List", .clip = ClipY(s.offset), ...) { ... }
+ */
+#define ClipX(offset)                                                          \
+  ((CC_ClipElementConfig){.horizontal = true, .childOffset = (offset)})
+#define ClipY(offset)                                                          \
+  ((CC_ClipElementConfig){.vertical = true, .childOffset = (offset)})
+#define ClipXY(offset)                                                         \
+  ((CC_ClipElementConfig){.horizontal = true,                                  \
+                          .vertical = true,                                    \
+                          .childOffset = (offset)})
 
 /* =========================================================================
  * Lifecycle
@@ -628,8 +754,22 @@ int CC_LoadGlobalFont(const char *path, int base_size);
  * Defaults to 0 (raylib default font). */
 int CC_GetGlobalFontId(void);
 
-int CC_LoadGlobalFontColor(const CC_Color color);
+/* Set the project-wide default text color used by every Text(...)
+ * element that does not specify its own .textColor. Defaults to
+ * ColorHex(0xFFFFFF) (opaque white) at startup.
+ *
+ *   CC_SetGlobalFontColor(ColorHex(0xDCDCDC));
+ *   Text("status", .fontSize = 14);  // renders with the global color
+ *   Text("error",  .fontSize = 14,
+ *        .textColor = Color(230, 80, 80, 255));  // per-call override
+ *
+ * Returns 0. Safe to call before or after CC_Init(); the value is
+ * stored in a file-scope static and read at every Text() expansion.
+ * Works identically in headless mode — the color flows into emitted
+ * text render commands either way. */
+int CC_SetGlobalFontColor(CC_Color color);
 
+/* Returns the currently configured global text color. */
 CC_Color CC_GetGlobalFontColor(void);
 
 #ifndef CCOMPOSE_NO_BACKEND
@@ -843,14 +983,14 @@ void CC_CloseScope(CC_Scope *scope);
 
 /* Row — horizontal stack (CLAY_LEFT_TO_RIGHT). Children are laid out
  * left to right with `.layout.childGap` between them. Use
- * `.layout.childAlignment.y = AlignMiddle()` to vertically center the
+ * `.layout.childAlignment.y = AlignYCenter()` to vertically center the
  * children within the row's height.
  *
  *     Row("Toolbar",
  *         .layout = { .sizing = { Grow(), Fixed(40) },
  *                     .padding = PadAll(8),
  *                     .childGap = 12,
- *                     .childAlignment = { .y = AlignMiddle() } }) {
+ *                     .childAlignment = { .y = AlignYCenter() } }) {
  *         Text("File", .textColor = COLOR_TEXT, .fontSize = 14);
  *         Text("Edit", .textColor = COLOR_TEXT, .fontSize = 14);
  *         Text("View", .textColor = COLOR_TEXT, .fontSize = 14);
@@ -924,9 +1064,10 @@ void CC_CloseScope(CC_Scope *scope);
  *     }
  */
 typedef struct {
-  float size;
-  float thickness;
-  CC_Color color;
+  float length;    /* size along the divider's flow axis (width for HDivider,
+                      height for VDivider). 0 = Grow() — fill the cross-axis. */
+  float thickness; /* size across the divider's flow axis. Default 1px. */
+  CC_Color color;  /* defaults to the global font color when {0,0,0,0}. */
 } CC_DividerOpts;
 
 /* Spacer opts — both axes default to Fit() (zero-initialized SizingAxis is
@@ -1017,7 +1158,7 @@ void CC_VDivider(CC_DividerOpts opts);
  *
  * High-level presets (slideX/Y, fade) and raw Clay properties
  * (backgroundColor, overlayColor, borderColor, borderWidth) can be
- * mixed freely. The macro auto-infers the CC_TransitionProp
+ * mixed freely. The macro auto-infers the CC_TransitionProperty
  * bitmask from the fields you set.
  */
 
@@ -1052,7 +1193,7 @@ typedef struct CC_TransitionEffect {
 /* ------- Internal: property bitmask inference --------------------------
  *
  * These macros inspect a CC_TransitionEffect to build the correct
- * CC_TransitionProp bitmask. Zero-valued fields are treated as unset.
+ * CC_TransitionProperty bitmask. Zero-valued fields are treated as unset.
  */
 
 /* True if a CC_Color has any non-zero channel. */
@@ -1099,7 +1240,7 @@ typedef struct CC_TransitionEffect {
  *
  * Expands to:
  *   - static enter/exit callback functions (name##__enter__ / name##__exit__)
- *   - a static inline function returning CC_TransitionConfig
+ *   - a static inline function returning CC_TransitionElementConfig
  *
  * Reference as: .transition = name()
  *
@@ -1111,7 +1252,7 @@ typedef struct CC_TransitionEffect {
 typedef struct CC__TransitionDef {
   bool (*handler)(CC_TransitionArgs);
   float duration;
-  CC_TransitionProp properties;
+  CC_TransitionProperty properties;
   CC_TransitionInteraction interactionHandling;
   CC_TransitionEffect enter;
   CC_TransitionEffect exit;
@@ -1138,7 +1279,7 @@ typedef struct CC__TransitionDef {
 #define DefineTransition(name, dur, ...)                                       \
   /* Enter callback: applies enter effects to target state. */                 \
   static CC_TransitionData name##__enter__(CC_TransitionData t,                \
-                                           CC_TransitionProp p) {              \
+                                           CC_TransitionProperty p) {              \
     (void)p;                                                                   \
     CC_TransitionEffect e =                                                    \
         ((CC__TransitionDef){.duration = (dur), __VA_ARGS__}).enter;           \
@@ -1147,22 +1288,22 @@ typedef struct CC__TransitionDef {
   }                                                                            \
   /* Exit callback: applies exit effects to initial state. */                  \
   static CC_TransitionData name##__exit__(CC_TransitionData t,                 \
-                                          CC_TransitionProp p) {               \
+                                          CC_TransitionProperty p) {               \
     (void)p;                                                                   \
     CC_TransitionEffect e =                                                    \
         ((CC__TransitionDef){.duration = (dur), __VA_ARGS__}).exit;            \
     CC__APPLY_EFFECT_(t, e);                                                   \
     return t;                                                                  \
   }                                                                            \
-  /* Config function: returns a fully built CC_TransitionConfig.           */  \
+  /* Config function: returns a fully built CC_TransitionElementConfig.           */  \
   /* Usage: .transition = name()                                          */   \
-  static inline CC_TransitionConfig name(void) {                               \
+  static inline CC_TransitionElementConfig name(void) {                               \
     CC__TransitionDef d = {.duration = (dur), __VA_ARGS__};                    \
-    CC_TransitionProp props =                                                  \
+    CC_TransitionProperty props =                                                  \
         d.properties                                                           \
             ? d.properties                                                     \
             : (CC__EFFECT_PROPS_(d.enter) | CC__EFFECT_PROPS_(d.exit));        \
-    return (CC_TransitionConfig){                                              \
+    return (CC_TransitionElementConfig){                                              \
         .handler = d.handler ? d.handler : CC_EaseOut,                         \
         .duration = d.duration,                                                \
         .properties = props,                                                   \
@@ -1368,8 +1509,8 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
  *
  *     Button("Save",
  *            .layout = { .padding        = PadAll(12),
- *                        .childAlignment = { .x = AlignCenter(),
- *                                            .y = AlignMiddle() } },
+ *                        .childAlignment = { .x = AlignXCenter(),
+ *                                            .y = AlignYCenter() } },
  *            .backgroundColor = CC_Hovered("Save")
  *                                   ? Color( 80, 140, 220, 255)
  *                                   : Color( 40, 100, 200, 255),
@@ -1465,11 +1606,11 @@ typedef struct {
   bool  noClamp;    /* skip auto-clamp against content bounds */
 } CC_ScrollConfig;
 
-void cc__scroll_update(CC_Scroll *state, const char *id,
+void CC__ScrollUpdate(CC_Scroll *state, const char *id,
                        CC_ScrollConfig cfg);
 
 #define CC_ScrollUpdate(state_ptr, id_literal, ...)                            \
-  cc__scroll_update((state_ptr), (id_literal),                                 \
+  CC__ScrollUpdate((state_ptr), (id_literal),                                 \
                     (CC_ScrollConfig){__VA_ARGS__})
 
 #ifdef __cplusplus
