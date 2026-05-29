@@ -1089,8 +1089,8 @@ typedef struct {
   Clay_SizingAxis height;
 } CC_SpacerOpts;
 
-void CC_HSpacer(void);
-void CC_VSpacer(void);
+void CC_HSpacer(void); /* grows on width  — flexible gap inside a Row */
+void CC_VSpacer(void); /* grows on height — flexible gap inside a Column */
 void CC_Spacer(CC_SpacerOpts opts);
 void CC_HDivider(CC_DividerOpts opts);
 void CC_VDivider(CC_DividerOpts opts);

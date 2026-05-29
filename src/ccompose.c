@@ -533,8 +533,8 @@ void CC_HSpacer(void) {
 void CC_VSpacer(void) {
   cc__leaf(CC_TOP_TO_BOTTOM,
            (CC_ElementDeclaration){
-               .layout = {.sizing = {.width = CLAY_SIZING_GROW(0, 0),
-                                     .height = CLAY_SIZING_FIT(0, 0)}}});
+               .layout = {.sizing = {.width = CLAY_SIZING_FIT(0, 0),
+                                     .height = CLAY_SIZING_GROW(0, 0)}}});
 }
 
 void CC_Spacer(CC_SpacerOpts opts) {
