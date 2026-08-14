@@ -56,8 +56,16 @@ int main(void) {
 }
 ```
 
-See the [wiki](https://github.com/rizukirr/ccompose/wiki) for full API docs,
-more examples, and the Clay field reference.
+> [!Note]
+> Tips for formatting, you may want to use this .clang-format
+> ```txt
+> BasedOnStyle: InheritParentConfig
+> AlignAfterOpenBracket: BlockIndent
+> BinPackArguments: false
+> ```
+
+
+See the [wiki](https://github.com/rizukirr/ccompose/wiki) for full API docs, more examples, and the Clay field reference.
 
 ## Backends
 
