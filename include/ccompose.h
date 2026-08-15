@@ -561,7 +561,8 @@ bool CC_EaseInOut(CC_TransitionArgs arguments);
  *     Clay_SetMaxElementCount(16384);   // note: affects next reset only
  *
  * For custom fonts, use CC_LoadFont() which returns a fontId you pass
- * to Text(.fontId = ..., .fontSize = ...).
+ * to Text(.fontId = ..., .fontSize = ...), or to CC_InitFont() to make
+ * it the default for every Text().
  *
  * If you outgrow this lifecycle and want full control (custom arena,
  * multiple Clay contexts, a non-raylib renderer), ignore CC_Init /
@@ -729,36 +730,43 @@ CC_DrawSlot *CC_AcquireDrawSlot(CC_DrawFn fn, void *user);
  */
 int CC_LoadFont(const char *path, int base_size);
 
-/* Load a font and make it the global default text font.
+/* Make an already-loaded font the global default text font, and set the
+ * global default text size.
  *
- * This is a convenience wrapper around CC_LoadFont():
- *   1) loads the font into a slot
- *   2) stores that slot as the "global font id"
+ * Pass a fontId returned by CC_LoadFont() (or 0 for the raylib default
+ * font). Text() / TextN() use these defaults whenever the call does not
+ * explicitly choose a non-zero .fontId / .fontSize:
  *
- * Text() / TextN() use this global font id whenever the call does not
- * explicitly choose a non-zero .fontId. In other words:
+ *   int body = CC_LoadFont("resources/Inter-Regular.ttf", 28);
+ *   CC_InitFont(body, 28);
  *
- *   Text("A", .fontSize = 16);                  // uses global font
- *   Text("B", .fontId = TITLE_ID, .fontSize=16);// explicit override
- *   Text("C", .fontId = 0, .fontSize = 16);     // also uses global font
+ *   Text("A");                                  // body font, size 28
+ *   Text("B", .fontSize = 16);                  // body font, size 16
+ *   Text("C", .fontId = TITLE_ID);              // explicit override
+ *   Text("D", .fontId = 0);                     // also uses global font
+ *
+ * base_size <= 0 leaves the global text size unchanged; it starts at
+ * CC_DEFAULT_FONT_SIZE (16).
  *
  * Returns:
- *   - loaded font id (>= 0) on success
- *   - -1 on failure (global font id is left unchanged)
+ *   - fontId on success
+ *   - -1 if fontId was never handed out by CC_LoadFont (globals are left
+ *     unchanged)
  *
- * Requirements and limits are the same as CC_LoadFont():
- *   - call AFTER CC_Init()
- *   - consumes one custom font slot (max CC_MAX_FONTS)
- *
- * Headless mode (CCOMPOSE_NO_BACKEND):
- *   - always returns -1
- *   - no font loading occurs
+ * Works in headless mode (CCOMPOSE_NO_BACKEND) — the ids and sizes flow
+ * into emitted render commands either way; only the bounds check differs
+ * (no fonts are ever loaded, so any id Clay's uint16_t fontId field can
+ * carry is accepted).
  */
-int CC_LoadGlobalFont(const char *path, int base_size);
+int CC_InitFont(int fontId, int base_size);
 
 /* Returns the currently configured global text font id.
  * Defaults to 0 (raylib default font). */
 int CC_GetGlobalFontId(void);
+
+/* Returns the currently configured global text size.
+ * Defaults to CC_DEFAULT_FONT_SIZE (16). */
+int CC_GetGlobalFontSize(void);
 
 /* Set the project-wide default text color used by every Text(...)
  * element that does not specify its own .textColor. Defaults to
@@ -1454,13 +1462,16 @@ CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale);
  * use custom fonts:
  *
  *   - Per-call: use CC_LoadFont() and pass the returned id as .fontId.
- *   - Global default: use CC_LoadGlobalFont(); Text calls with
- *     omitted (or zero) .fontId will use that global id.
+ *   - Global default: pass the id from CC_LoadFont() to CC_InitFont();
+ *     Text calls with omitted (or zero) .fontId will use that global id.
  *
  * Font-id precedence inside Text:
  *   1) if .fontId is non-zero, that explicit value wins
  *   2) otherwise, ccompose injects CC_GetGlobalFontId()
  *   3) if no global font was set, this falls back to 0 (raylib default)
+ *
+ * Font-size precedence is the same: an explicit non-zero .fontSize wins,
+ * otherwise ccompose injects CC_GetGlobalFontSize().
  *
  * Clay does NOT copy the chars — the pointer must remain valid at
  * least until Clay_EndLayout() (i.e. until CC_End() returns). Stack
@@ -1479,7 +1490,7 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
   }
 
   if (style.fontSize == 0)
-    style.fontSize = CC_DEFAULT_FONT_SIZE;
+    style.fontSize = (uint16_t)CC_GetGlobalFontSize();
 
   if (style.textColor.a == 0 && style.textColor.r == 0 &&
       style.textColor.g == 0 && style.textColor.b == 0)

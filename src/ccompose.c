@@ -42,6 +42,7 @@ static void (*cc__error_handler_override)(CC_ErrorData) = NULL;
 static CC_Color cc__background_color = {0, 0, 0, 255};
 static CC_Color cc__font_global_color = {255.0f, 255.0f, 255.0f, 255.0f};
 static int cc__font_global_id = 0;
+static int cc__font_global_size = CC_DEFAULT_FONT_SIZE;
 
 typedef struct {
   uint32_t hash;
@@ -188,17 +189,6 @@ void CC_SetWindowFlags(unsigned int raylib_flags) {
 }
 
 void CC_SetBackground(CC_Color color) { cc__background_color = color; }
-
-int CC_LoadGlobalFont(const char *path, int base_size) {
-  if (!cc__initialized || cc__font_count >= CC_MAX_FONTS)
-    return -1;
-
-  int f = CC_LoadFont(path, base_size);
-  if (f < 0)
-    return -1;
-  cc__font_global_id = f;
-  return cc__font_global_id;
-}
 
 int CC_GetGlobalFontId(void) {
   return (cc__font_global_id >= 0) ? cc__font_global_id : 0;
@@ -385,11 +375,6 @@ int CC_LoadFont(const char *path, int base_size) {
   (void)base_size;
   return -1;
 }
-int CC_LoadGlobalFont(const char *path, int base_size) {
-  (void)path;
-  (void)base_size;
-  return -1;
-}
 int CC_SetGlobalFontColor(CC_Color color) {
   cc__font_global_color = color;
   return 0;
@@ -415,6 +400,28 @@ static Clay_Dimensions cc__default_measure_text(Clay_StringSlice text,
 }
 
 #endif /* CCOMPOSE_NO_BACKEND */
+
+/* ---------- Shared global font state ---------- */
+
+int CC_InitFont(int fontId, int base_size) {
+#ifndef CCOMPOSE_NO_BACKEND
+  /* Reject ids that were never handed out by CC_LoadFont — the renderer
+   * indexes the font array with this value. */
+  if (fontId < 0 || fontId >= cc__font_count)
+    return -1;
+#else
+  /* No fonts are ever loaded here, so the only bound is what Clay's
+   * uint16_t fontId field can carry. */
+  if (fontId < 0 || fontId > UINT16_MAX)
+    return -1;
+#endif
+  cc__font_global_id = fontId;
+  if (base_size > 0)
+    cc__font_global_size = base_size;
+  return fontId;
+}
+
+int CC_GetGlobalFontSize(void) { return cc__font_global_size; }
 
 /* ---------- Shared lifecycle ---------- */
 

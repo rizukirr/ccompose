@@ -487,7 +487,7 @@ int main(void) {
   CC_Init();
 
   int global_font_id =
-      CC_LoadGlobalFont("examples/resources/Inter-Regular.ttf", 28);
+      CC_InitFont(CC_LoadFont("examples/resources/Inter-Regular.ttf", 28), 16);
   CC_SetGlobalFontColor(COLOR_TEXT);
   if (global_font_id < 0) {
     fprintf(stderr,
