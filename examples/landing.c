@@ -156,7 +156,9 @@ int main(void) {
   CC_SetBackground((CC_Color){0, 0, 0, 255});
   CC_Init();
 
-  CC_LoadGlobalFont("examples/resources/Roboto-Regular.ttf", 96);
+  /* Rasterize at 96 so the big hero text stays crisp; 16 is the default
+   * size for Text() calls that don't set one. */
+  CC_InitFont(CC_LoadFont("examples/resources/Roboto-Regular.ttf", 96), 16);
 
   CC_RUN_LOOP(frame);
 
