@@ -575,14 +575,34 @@ void CC_VDivider(CC_DividerOpts opts) {
           .backgroundColor = c});
 }
 
-CC_Scope CC_OpenElement(CC_String id, Clay_LayoutDirection direction,
-                        Clay_ElementDeclaration decl) {
-  decl.layout.layoutDirection = direction;
+static void cc__open_element_with_id(CC_String id) {
   if (id.length == 0) {
     /* Anonymous element — Clay generates an internal ID. */
     Clay__OpenElement();
   } else {
     Clay__OpenElementWithId(Clay__HashString(id, 0));
+  }
+}
+
+CC_Scope CC_OpenElement(CC_String id, Clay_LayoutDirection direction,
+                        Clay_ElementDeclaration decl) {
+  decl.layout.layoutDirection = direction;
+  cc__open_element_with_id(id);
+  Clay__ConfigureOpenElement(decl);
+  return (CC_Scope){.active = 1};
+}
+
+CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
+  decl.layout.layoutDirection = CLAY_LEFT_TO_RIGHT;
+  cc__open_element_with_id(id);
+  /* vibekit: a press that started outside the button also counts, track
+   * the press origin id if that ever matters. */
+  if (Clay_Hovered()) {
+    Clay_PointerData pointer = Clay_GetPointerState();
+    bool down = pointer.state == CLAY_POINTER_DATA_PRESSED ||
+                pointer.state == CLAY_POINTER_DATA_PRESSED_THIS_FRAME;
+    decl.backgroundColor.a *=
+        down ? CC_BUTTON_PRESS_ALPHA : CC_BUTTON_HOVER_ALPHA;
   }
   Clay__ConfigureOpenElement(decl);
   return (CC_Scope){.active = 1};
