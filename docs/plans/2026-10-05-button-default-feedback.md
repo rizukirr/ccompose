@@ -23,7 +23,7 @@
 - Modify: `include/ccompose.h:1507-1577`
 - Modify: `src/ccompose.c:589`
 
-- [ ] Step 1: Create `tests/button_test.c` with this content.
+- [x] Step 1: Create `tests/button_test.c` with this content.
 
 ```c
 /* Headless test - Button default hover/press feedback.
@@ -130,15 +130,15 @@ int main(void) {
 }
 ```
 
-- [ ] Step 2: In `CMakeLists.txt`, add this line directly after the `ccompose_add_test(compose_spacer_divider_test tests/spacer_divider_test.c)` line.
+- [x] Step 2: In `CMakeLists.txt`, add this line directly after the `ccompose_add_test(compose_spacer_divider_test tests/spacer_divider_test.c)` line.
 
 ```cmake
     ccompose_add_test(ccompose_button_test        tests/button_test.c)
 ```
 
-- [ ] Step 3: Run `cmake -S . -B build -DCCOMPOSE_BACKEND_RAYLIB=OFF && cmake --build build`. Confirm the build fails on `CC_BUTTON_HOVER_ALPHA` being undeclared in `tests/button_test.c`, which shows the test exercises the new surface.
+- [x] Step 3: Run `cmake -S . -B build -DCCOMPOSE_BACKEND_RAYLIB=OFF && cmake --build build`. Confirm the build fails on `CC_BUTTON_HOVER_ALPHA` being undeclared in `tests/button_test.c`, which shows the test exercises the new surface.
 
-- [ ] Step 4: In `src/ccompose.c`, add this function directly after the closing brace of `CC_OpenElement` and before `CC_CloseScope`.
+- [x] Step 4: In `src/ccompose.c`, add this function directly after the closing brace of `CC_OpenElement` and before `CC_CloseScope`.
 
 ```c
 CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
@@ -162,7 +162,7 @@ CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
 }
 ```
 
-- [ ] Step 5: In `include/ccompose.h`, replace the `Button("id", ...)` bullet in the "Button + pointer interaction" comment block (the five lines starting ` *   Button("id", ...)  — scoped block` and ending ` *                        CC_Hovered / CC_Clicked in the IMGUI idiom.`) with this.
+- [x] Step 5: In `include/ccompose.h`, replace the `Button("id", ...)` bullet in the "Button + pointer interaction" comment block (the five lines starting ` *   Button("id", ...)  — scoped block` and ending ` *                        CC_Hovered / CC_Clicked in the IMGUI idiom.`) with this.
 
 ```c
  *   Button("id", ...)  — scoped block, same shape as Row/Column/Box,
@@ -174,7 +174,7 @@ CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
  *                        element with no feedback, use Row.
 ```
 
-- [ ] Step 6: In the same comment block, replace the "Typical pattern" example (from the line ` *     Button("Save",` through the line ` *     }`) with this, which drops the manual hover swap.
+- [x] Step 6: In the same comment block, replace the "Typical pattern" example (from the line ` *     Button("Save",` through the line ` *     }`) with this, which drops the manual hover swap.
 
 ```c
  *     Button("Save",
@@ -195,7 +195,7 @@ CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
  *                                            : COLOR_TRANSPARENT
 ```
 
-- [ ] Step 7: In `include/ccompose.h`, replace the final comment and macro of the block (from `/* Button — scoped block for clickable elements. Identical expansion to` through the two-line `#define Button(id_literal, ...)` definition) with this.
+- [x] Step 7: In `include/ccompose.h`, replace the final comment and macro of the block (from `/* Button — scoped block for clickable elements. Identical expansion to` through the two-line `#define Button(id_literal, ...)` definition) with this.
 
 ```c
 /* Alpha multipliers Button applies to its background while hovered and
@@ -228,11 +228,11 @@ CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
                   __VA_ARGS__)
 ```
 
-- [ ] Step 8: Run `cmake --build build && ctest --test-dir build --output-on-failure`.
+- [x] Step 8: Run `cmake --build build && ctest --test-dir build --output-on-failure`.
 
-- [ ] Step 9: Run `cmake -S . -B build-override -DCCOMPOSE_BACKEND_RAYLIB=OFF -DCMAKE_C_FLAGS=-DCC_BUTTON_HOVER_ALPHA=0.5f && cmake --build build-override 2>&1 | tee build-override/build.log && ctest --test-dir build-override --output-on-failure`, then run `grep -ci redefin build-override/build.log` and confirm it reports no matches. Both `build` and `build-override` are ignored by the `build**` rule in `.gitignore`.
+- [x] Step 9: Run `cmake -S . -B build-override -DCCOMPOSE_BACKEND_RAYLIB=OFF -DCMAKE_C_FLAGS=-DCC_BUTTON_HOVER_ALPHA=0.5f && cmake --build build-override 2>&1 | tee build-override/build.log && ctest --test-dir build-override --output-on-failure`, then run `grep -ci redefin build-override/build.log` and confirm it reports no matches. Both `build` and `build-override` are ignored by the `build**` rule in `.gitignore`.
 
-- [ ] Step 10: Commit `tests/button_test.c`, `CMakeLists.txt`, `include/ccompose.h` and `src/ccompose.c`.
+- [x] Step 10: Commit `tests/button_test.c`, `CMakeLists.txt`, `include/ccompose.h` and `src/ccompose.c`.
 
 ### Task 2: Demo relies on the default feedback → verify: `grep -cE 'CC_(Hovered|Clicked)\("(BtnPrimary|BtnSecondary|BtnNotifToggle)"\) *\?' examples/demo.c` reports no matches, and `cmake -S . -B build-demo && cmake --build build-demo` exits 0
 
