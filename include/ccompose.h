@@ -1600,8 +1600,7 @@ CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
  * CC_Hovered / CC_Clicked have something to target. The feedback
  * itself also works with id == "". */
 #define Button(id_literal, ...)                                                \
-  CC_BUTTON_IMPL_(CC_SCOPE_NAME_(__COUNTER__), CC__Str(id_literal),            \
-                  __VA_ARGS__)
+  CC_BUTTON_IMPL_(CC_SCOPE_NAME_(__COUNTER__), CC__Str(id_literal), __VA_ARGS__)
 
 /* =========================================================================
  * Scroll — input glue for .clip viewports
