@@ -234,23 +234,18 @@ static void render_interact(void) {
                  .childGap = 12,
                  .childAlignment = ChildAlign(.y = AlignYCenter())}) {
 
-    /* Primary — filled accent, darkens on press. */
-    CC_Color primary_bg = CC_Clicked("BtnPrimary")   ? COLOR_PRESSED
-                          : CC_Hovered("BtnPrimary") ? COLOR_ACCENT
-                                                     : COLOR_ACCENT_DIM;
+    /* Primary: filled accent, default hover and press feedback. */
     Button("BtnPrimary",
            .layout = {.padding = PadSymmetric(18, 10),
                       .childAlignment =
                           ChildAlign(.x = AlignXCenter(), .y = AlignYCenter())},
-           .backgroundColor = primary_bg, .cornerRadius = RadiusAll(8)) {
+           .backgroundColor = COLOR_ACCENT_DIM, .cornerRadius = RadiusAll(8)) {
       Text("Primary", .fontSize = 14, .textColor = COLOR_TEXT);
     }
 
-    /* Secondary — surface fill with a hover swap. */
+    /* Secondary: surface fill, default hover and press feedback. */
     Button("BtnSecondary", .layout = {.padding = PadSymmetric(18, 10)},
-           .backgroundColor =
-               CC_Hovered("BtnSecondary") ? COLOR_HOVER : COLOR_SURFACE_2,
-           .cornerRadius = RadiusAll(8),
+           .backgroundColor = COLOR_SURFACE_2, .cornerRadius = RadiusAll(8),
            .border = {.color = COLOR_BORDER, .width = BorderAll(1)}) {
       Text("Secondary", .fontSize = 14, .textColor = COLOR_TEXT);
     }
@@ -338,9 +333,8 @@ static void render_trans(void) {
                  .childGap = 12,
                  .childAlignment = ChildAlign(.y = AlignYCenter())}) {
     Button("BtnNotifToggle", .layout = {.padding = PadSymmetric(18, 10)},
-           .backgroundColor = toggle_notifications           ? COLOR_PRESSED
-                              : CC_Hovered("BtnNotifToggle") ? COLOR_ACCENT
-                                                             : COLOR_ACCENT_DIM,
+           .backgroundColor =
+               toggle_notifications ? COLOR_PRESSED : COLOR_ACCENT_DIM,
            .cornerRadius = RadiusAll(8)) {
       Text(toggle_notifications ? "Dismiss notification" : "Show notification",
            .fontSize = 14, .textColor = COLOR_TEXT);
