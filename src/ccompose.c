@@ -575,6 +575,67 @@ void CC_VDivider(CC_DividerOpts opts) {
           .backgroundColor = c});
 }
 
+/* ---------- Progress ---------- */
+
+/* Seconds since startup, the clock for the infinite progress animations.
+ * Fixed at 0 in headless builds. */
+static float cc__time(void) {
+#ifndef CCOMPOSE_NO_BACKEND
+  return (float)GetTime();
+#else
+  return 0.0f;
+#endif
+}
+
+static CC_Color cc__progress_track(CC_Color fill, CC_Color track) {
+  if (track.a != 0)
+    return track;
+  fill.a *= 0.25f;
+  return fill;
+}
+
+void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
+  float t = opts.thickness > 0.0f ? opts.thickness : 4.0f;
+  CC_Color fill = (opts.color.a == 0) ? cc__font_global_color : opts.color;
+  CC_Color track = cc__progress_track(fill, opts.trackColor);
+  Clay_SizingAxis w = opts.length > 0.0f ? CLAY_SIZING_FIXED(opts.length)
+                                         : CLAY_SIZING_GROW(0, 0);
+  float start = 0.0f;
+  float end = value > 1.0f ? 1.0f : value;
+  if (value < 0.0f) {
+    /* A segment 30% of the track wide sweeps left to right every 1.5s.
+     * The phase overshoots to 1.3 so the segment shrinks out of the
+     * right edge instead of needing a clip. */
+    float cycles = cc__time() / 1.5f;
+    float p = (cycles - (float)(int)cycles) * 1.3f;
+    start = p > 0.3f ? p - 0.3f : 0.0f;
+    end = p < 1.0f ? p : 1.0f;
+  }
+
+  Clay__OpenElement();
+  Clay__ConfigureOpenElement((CC_ElementDeclaration){
+      .layout = {.sizing = {.width = w, .height = CLAY_SIZING_FIXED(t)},
+                 .layoutDirection = CC_LEFT_TO_RIGHT},
+      .backgroundColor = track,
+      .cornerRadius = CLAY_CORNER_RADIUS(t / 2.0f)});
+  if (start > 0.0f) {
+    cc__leaf(CC_LEFT_TO_RIGHT,
+             (CC_ElementDeclaration){
+                 .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(start),
+                                       .height = CLAY_SIZING_GROW(0, 0)}}});
+  }
+  if (end > start) {
+    cc__leaf(
+        CC_LEFT_TO_RIGHT,
+        (CC_ElementDeclaration){
+            .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(end - start),
+                                  .height = CLAY_SIZING_GROW(0, 0)}},
+            .backgroundColor = fill,
+            .cornerRadius = CLAY_CORNER_RADIUS(t / 2.0f)});
+  }
+  Clay__CloseElement();
+}
+
 static void cc__open_element_with_id(CC_String id) {
   if (id.length == 0) {
     /* Anonymous element — Clay generates an internal ID. */
