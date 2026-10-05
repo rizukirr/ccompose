@@ -240,7 +240,7 @@ CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
 - Modify: `examples/demo.c:237-253`
 - Modify: `examples/demo.c:340-343`
 
-- [ ] Step 1: In `render_interact`, replace the primary button's comment, its `primary_bg` variable and its `.backgroundColor` line. The block from `/* Primary — filled accent, darkens on press. */` through the `Button("BtnPrimary", ...)` opening line becomes this.
+- [x] Step 1: In `render_interact`, replace the primary button's comment, its `primary_bg` variable and its `.backgroundColor` line. The block from `/* Primary — filled accent, darkens on press. */` through the `Button("BtnPrimary", ...)` opening line becomes this.
 
 ```c
     /* Primary: filled accent, default hover and press feedback. */
@@ -251,7 +251,7 @@ CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
            .backgroundColor = COLOR_ACCENT_DIM, .cornerRadius = RadiusAll(8)) {
 ```
 
-- [ ] Step 2: Replace the secondary button's comment and opening lines with this.
+- [x] Step 2: Replace the secondary button's comment and opening lines with this.
 
 ```c
     /* Secondary: surface fill, default hover and press feedback. */
@@ -260,7 +260,7 @@ CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
            .border = {.color = COLOR_BORDER, .width = BorderAll(1)}) {
 ```
 
-- [ ] Step 3: Replace the `BtnNotifToggle` opening lines with this. The toggled color stays because it shows state.
+- [x] Step 3: Replace the `BtnNotifToggle` opening lines with this. The toggled color stays because it shows state.
 
 ```c
     Button("BtnNotifToggle", .layout = {.padding = PadSymmetric(18, 10)},
@@ -269,15 +269,15 @@ CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
            .cornerRadius = RadiusAll(8)) {
 ```
 
-- [ ] Step 4: Leave `BtnGhost` and the sidebar navigation buttons as they are. Their idle background is `COLOR_TRANSPARENT`, which the default cannot scale.
+- [x] Step 4: Leave `BtnGhost` and the sidebar navigation buttons as they are. Their idle background is `COLOR_TRANSPARENT`, which the default cannot scale.
 
-- [ ] Step 5: Run `clang-format -i examples/demo.c`, then `git diff --stat examples/demo.c` to confirm only that file changed.
+- [x] Step 5: Run `clang-format -i examples/demo.c`, then `git diff --stat examples/demo.c` to confirm only that file changed.
 
-- [ ] Step 6: Run `cmake -S . -B build-demo && cmake --build build-demo`. The raylib backend is on by default, and CMake fetches raylib when `find_package` does not locate a matching one, so this step needs network access in that case. Confirm the build output has no unused-variable warning for `examples/demo.c`.
+- [x] Step 6: Run `cmake -S . -B build-demo && cmake --build build-demo`. The raylib backend is on by default, and CMake fetches raylib when `find_package` does not locate a matching one, so this step needs network access in that case. Confirm the build output has no unused-variable warning for `examples/demo.c`.
 
-- [ ] Step 7: Run `grep -cE 'CC_(Hovered|Clicked)\("(BtnPrimary|BtnSecondary|BtnNotifToggle)"\) *\?' examples/demo.c`.
+- [x] Step 7: Run `grep -cE 'CC_(Hovered|Clicked)\("(BtnPrimary|BtnSecondary|BtnNotifToggle)"\) *\?' examples/demo.c`.
 
-- [ ] Step 8: Commit `examples/demo.c`.
+- [x] Step 8: Commit `examples/demo.c`.
 
 ## Outside this plan
 
