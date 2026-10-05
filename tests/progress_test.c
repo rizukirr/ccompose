@@ -5,6 +5,7 @@
  *   2. A zero value emits a track and no fill.
  *   3. Omitted options fall back to the documented defaults.
  *   4. Infinite mode emits nothing outside the track.
+ *   5. The ring reserves a square of its size, 40px by default.
  * */
 
 #include <assert.h>
@@ -88,6 +89,12 @@ int main(void) {
     Row("Infinite", .layout = {.sizing = {Fixed(200), Fit()}}) {
       LinearProgress(CC_PROGRESS_INFINITE);
     }
+    Row("Ring", .layout = {.sizing = {Fit(), Fit()}}) {
+      CircularProgress(0.5f);
+    }
+    Row("RingBig", .layout = {.sizing = {Fit(), Fit()}}) {
+      CircularProgress(CC_PROGRESS_INFINITE, .size = 64);
+    }
   }
   CC_RenderCommandArray cmds = CC_End();
 
@@ -125,6 +132,12 @@ int main(void) {
   Rects inf = rects_in(cmds, "Infinite");
   assert(inf.count >= 1 && "infinite bar lost its track");
   assert(close_to(inf.r[0]->boundingBox.width, 200.0f));
+
+  CC_BoundingBox ring = box_of("Ring");
+  assert(close_to(ring.width, 40.0f) && close_to(ring.height, 40.0f));
+
+  CC_BoundingBox big = box_of("RingBig");
+  assert(close_to(big.width, 64.0f) && close_to(big.height, 64.0f));
 
   assert(!saw_error && "Clay error leaked");
 

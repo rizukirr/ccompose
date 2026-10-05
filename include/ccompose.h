@@ -1137,6 +1137,28 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts);
 #define LinearProgress(value, ...)                                             \
   CC_LinearProgress((value), (CC_LinearProgressOpts){__VA_ARGS__})
 
+/* CircularProgress - a ring that fills clockwise from 12 o'clock, or a
+ * rotating arc for CC_PROGRESS_INFINITE.
+ *
+ *     CircularProgress(0.75f, .size = 48);
+ *     CircularProgress(CC_PROGRESS_INFINITE, .color = COLOR_ACCENT);
+ *
+ * The ring is painted through the Draw slot pool (see
+ * CC_AcquireDrawSlot), so it needs the raylib backend. In headless
+ * builds, or when the pool is full, it reserves its square and draws
+ * nothing. */
+typedef struct {
+  float size;          /* diameter. Default 40px. */
+  float thickness;     /* stroke width. Default 4px. */
+  CC_Color color;      /* arc. Defaults to the global font color. */
+  CC_Color trackColor; /* full ring. Defaults to color at 25% alpha. */
+} CC_CircularProgressOpts;
+
+void CC_CircularProgress(float value, CC_CircularProgressOpts opts);
+
+#define CircularProgress(value, ...)                                           \
+  CC_CircularProgress((value), (CC_CircularProgressOpts){__VA_ARGS__})
+
 /* Draw / DrawRow / DrawColumn — layout elements whose computed bounding
  * box is handed to a user callback, so you can issue arbitrary raylib
  * draw calls positioned and sized by Clay.
