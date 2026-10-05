@@ -171,6 +171,19 @@ CC_ImageRef *CC_AcquireImageRef(Texture2D *texture, CC_ImageScale scale) {
 
 static CC_DrawSlot cc__draw_pool[CC_DRAW_POOL_SIZE];
 static int cc__draw_pool_used = 0;
+
+/* Per-frame parameters for CC_CircularProgress. A draw slot's user
+ * pointer must stay valid until CC_End(), so the values live in this
+ * pool. Reset together with the draw-slot pool. */
+typedef struct {
+  float value;
+  float thickness;
+  CC_Color color;
+  CC_Color track;
+} cc__ring_params;
+
+static cc__ring_params cc__ring_pool[CC_DRAW_POOL_SIZE];
+static int cc__ring_pool_used = 0;
 static int cc__window_width = 800;
 static int cc__window_height = 600;
 static const char *cc__window_title = "ccompose";
@@ -243,6 +256,7 @@ static void cc__backend_begin_frame(void) {
   Clay_UpdateScrollContainers(true, (Clay_Vector2){wheel.x, wheel.y},
                               GetFrameTime());
   cc__draw_pool_used = 0;
+  cc__ring_pool_used = 0;
 }
 
 static void cc__backend_end_frame(Clay_RenderCommandArray commands) {
@@ -573,6 +587,111 @@ void CC_VDivider(CC_DividerOpts opts) {
       (CC_ElementDeclaration){
           .layout = {.sizing = {.width = CLAY_SIZING_FIXED(t), .height = h}},
           .backgroundColor = c});
+}
+
+/* ---------- Progress ---------- */
+
+/* Seconds since startup, the clock for the infinite progress animations.
+ * Fixed at 0 in headless builds. */
+static float cc__time(void) {
+#ifndef CCOMPOSE_NO_BACKEND
+  return (float)GetTime();
+#else
+  return 0.0f;
+#endif
+}
+
+static CC_Color cc__progress_track(CC_Color fill, CC_Color track) {
+  if (track.a != 0)
+    return track;
+  fill.a *= 0.25f;
+  return fill;
+}
+
+void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
+  float t = opts.thickness > 0.0f ? opts.thickness : 4.0f;
+  CC_Color fill = (opts.color.a == 0) ? cc__font_global_color : opts.color;
+  CC_Color track = cc__progress_track(fill, opts.trackColor);
+  Clay_SizingAxis w = opts.length > 0.0f ? CLAY_SIZING_FIXED(opts.length)
+                                         : CLAY_SIZING_GROW(0, 0);
+  float start = 0.0f;
+  float end = value > 1.0f ? 1.0f : value;
+  if (value < 0.0f) {
+    /* A segment 30% of the track wide sweeps left to right every 1.5s.
+     * The phase overshoots to 1.3 so the segment shrinks out of the
+     * right edge instead of needing a clip. */
+    float cycles = cc__time() / 1.5f;
+    float p = (cycles - (float)(int)cycles) * 1.3f;
+    start = p > 0.3f ? p - 0.3f : 0.0f;
+    end = p < 1.0f ? p : 1.0f;
+  }
+
+  Clay__OpenElement();
+  Clay__ConfigureOpenElement((CC_ElementDeclaration){
+      .layout = {.sizing = {.width = w, .height = CLAY_SIZING_FIXED(t)},
+                 .layoutDirection = CC_LEFT_TO_RIGHT},
+      .backgroundColor = track,
+      .cornerRadius = CLAY_CORNER_RADIUS(t / 2.0f)});
+  if (start > 0.0f) {
+    cc__leaf(CC_LEFT_TO_RIGHT,
+             (CC_ElementDeclaration){
+                 .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(start),
+                                       .height = CLAY_SIZING_GROW(0, 0)}}});
+  }
+  if (end > start) {
+    cc__leaf(
+        CC_LEFT_TO_RIGHT,
+        (CC_ElementDeclaration){
+            .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(end - start),
+                                  .height = CLAY_SIZING_GROW(0, 0)}},
+            .backgroundColor = fill,
+            .cornerRadius = CLAY_CORNER_RADIUS(t / 2.0f)});
+  }
+  Clay__CloseElement();
+}
+
+#ifndef CCOMPOSE_NO_BACKEND
+static void cc__paint_ring(CC_BoundingBox bb, void *user) {
+  cc__ring_params *r = (cc__ring_params *)user;
+  Vector2 center = {bb.x + bb.width / 2.0f, bb.y + bb.height / 2.0f};
+  float outer = (bb.width < bb.height ? bb.width : bb.height) / 2.0f;
+  float inner = outer > r->thickness ? outer - r->thickness : 0.0f;
+  /* raylib angles are degrees, 0 at 3 o'clock, growing clockwise. */
+  float start = -90.0f;
+  float sweep = 360.0f * r->value;
+  if (r->value < 0.0f) {
+    /* A 90 degree arc that turns once per second. */
+    float turns = cc__time();
+    start += 360.0f * (turns - (float)(int)turns);
+    sweep = 90.0f;
+  }
+  DrawRing(center, inner, outer, 0.0f, 360.0f, 64,
+           CLAY_COLOR_TO_RAYLIB_COLOR(r->track));
+  if (sweep > 0.0f) {
+    DrawRing(center, inner, outer, start, start + sweep, 64,
+             CLAY_COLOR_TO_RAYLIB_COLOR(r->color));
+  }
+}
+#endif
+
+void CC_CircularProgress(float value, CC_CircularProgressOpts opts) {
+  float size = opts.size > 0.0f ? opts.size : 40.0f;
+  CC_ElementDeclaration decl = {
+      .layout = {.sizing = {.width = CLAY_SIZING_FIXED(size),
+                            .height = CLAY_SIZING_FIXED(size)}}};
+#ifndef CCOMPOSE_NO_BACKEND
+  if (cc__ring_pool_used < CC_DRAW_POOL_SIZE) {
+    cc__ring_params *r = &cc__ring_pool[cc__ring_pool_used++];
+    r->value = value > 1.0f ? 1.0f : value;
+    r->thickness = opts.thickness > 0.0f ? opts.thickness : 4.0f;
+    r->color = (opts.color.a == 0) ? cc__font_global_color : opts.color;
+    r->track = cc__progress_track(r->color, opts.trackColor);
+    decl.custom.customData = CC_AcquireDrawSlot(cc__paint_ring, r);
+  }
+#else
+  (void)value;
+#endif
+  cc__leaf(CC_LEFT_TO_RIGHT, decl);
 }
 
 static void cc__open_element_with_id(CC_String id) {

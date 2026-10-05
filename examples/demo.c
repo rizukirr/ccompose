@@ -198,6 +198,24 @@ static void render_home(void) {
                 "Every macro field is a designated initializer on Clay's "
                 "own struct — no wrappers, no relearning.");
   }
+  Spacer(.height = Fixed(20));
+  Text("Progress", .fontSize = 16, .textColor = COLOR_ACCENT);
+  Spacer(.height = Fixed(12));
+
+  /* A value that climbs from 0 to 1 every four seconds. */
+  float cycles = canvas_state.t / 4.0f;
+  float loop = cycles - (float)(int)cycles;
+
+  Column("ProgressBars",
+         .layout = {.sizing = {Grow(), Fit()}, .childGap = 12}) {
+    LinearProgress(loop, .color = COLOR_ACCENT);
+    LinearProgress(CC_PROGRESS_INFINITE, .color = COLOR_ACCENT);
+  }
+  Spacer(.height = Fixed(16));
+  Row("ProgressRings", .layout = {.sizing = {Grow(), Fit()}, .childGap = 16}) {
+    CircularProgress(loop, .color = COLOR_ACCENT);
+    CircularProgress(CC_PROGRESS_INFINITE, .color = COLOR_ACCENT);
+  }
 }
 
 static void render_layout(void) {
