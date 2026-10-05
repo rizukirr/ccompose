@@ -1515,10 +1515,12 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
  *   CC_Clicked("id")   — true on the frame the left mouse button was
  *                        pressed while hovering that element.
  *   Button("id", ...)  — scoped block, same shape as Row/Column/Box,
- *                        opens a CLAY_LEFT_TO_RIGHT element. No
- *                        injected styling, no implicit hover
- *                        behavior — a semantic alias that pairs with
- *                        CC_Hovered / CC_Clicked in the IMGUI idiom.
+ *                        opens a CLAY_LEFT_TO_RIGHT element. While the
+ *                        pointer is over it, the background alpha is
+ *                        multiplied by CC_BUTTON_HOVER_ALPHA, or by
+ *                        CC_BUTTON_PRESS_ALPHA while the left button
+ *                        is held. Nothing else is injected. For an
+ *                        element with no feedback, use Row.
  *
  * Typical pattern:
  *
@@ -1528,14 +1530,18 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
  *            .layout = { .padding        = PadAll(12),
  *                        .childAlignment = { .x = AlignXCenter(),
  *                                            .y = AlignYCenter() } },
- *            .backgroundColor = CC_Hovered("Save")
- *                                   ? Color( 80, 140, 220, 255)
- *                                   : Color( 40, 100, 200, 255),
+ *            .backgroundColor = Color( 40, 100, 200, 255),
  *            .cornerRadius    = RadiusAll(8)) {
  *         Text("Save",
  *              .textColor = Color(255, 255, 255, 255),
  *              .fontSize  = 16);
  *     }
+ *
+ * A background with alpha 0 has nothing to scale, so a transparent
+ * "ghost" button still needs its own swap:
+ *
+ *     .backgroundColor = CC_Hovered("Ghost") ? COLOR_HOVER
+ *                                            : COLOR_TRANSPARENT
  *
  * CC_Clicked / CC_Hovered can be queried before or after the Button
  * block in the same frame. The first frame a button becomes visible it
@@ -1568,13 +1574,34 @@ bool CC__MousePressedThisFrame(void);
  * check so the Clay id hash is only computed on press frames. */
 #define CC_Clicked(id) (CC__MousePressedThisFrame() && CC_Hovered(id))
 
-/* Button — scoped block for clickable elements. Identical expansion to
- * Row: CLAY_LEFT_TO_RIGHT children, every CC_ElementDeclaration
- * field available, no hidden behavior. Give it a non-empty string
- * literal id so CC_Hovered / CC_Clicked have something to target;
- * with id == "" it degrades to a plain LTR element. */
+/* Alpha multipliers Button applies to its background while hovered and
+ * while hovered with the left button held. Define either before
+ * including this header, or with -D, to override. */
+#ifndef CC_BUTTON_HOVER_ALPHA
+#define CC_BUTTON_HOVER_ALPHA 0.85f
+#endif
+#ifndef CC_BUTTON_PRESS_ALPHA
+#define CC_BUTTON_PRESS_ALPHA 0.70f
+#endif
+
+/* Opens a CLAY_LEFT_TO_RIGHT element like CC_OpenElement, scaling
+ * decl.backgroundColor.a by the factors above from Clay's pointer
+ * state. The runtime hook the Button macro expands into. */
+CC_Scope CC_OpenButton(CC_String id, CC_ElementDeclaration decl);
+
+#define CC_BUTTON_IMPL_(scope, id_string, ...)                                 \
+  for (CC_Scope scope =                                                        \
+           CC_OpenButton((id_string), (CC_ElementDeclaration){__VA_ARGS__});   \
+       scope.active; CC_CloseScope(&scope))
+
+/* Button — scoped block for clickable elements. LEFT_TO_RIGHT children
+ * and every CC_ElementDeclaration field, like Row, plus the default
+ * hover and press alpha feedback. Give it a non-empty id so
+ * CC_Hovered / CC_Clicked have something to target. The feedback
+ * itself also works with id == "". */
 #define Button(id_literal, ...)                                                \
-  Element(CLAY_LEFT_TO_RIGHT, id_literal, __VA_ARGS__)
+  CC_BUTTON_IMPL_(CC_SCOPE_NAME_(__COUNTER__), CC__Str(id_literal),            \
+                  __VA_ARGS__)
 
 /* =========================================================================
  * Scroll — input glue for .clip viewports

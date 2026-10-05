@@ -185,6 +185,7 @@ if(CCOMPOSE_BUILD_TESTS)
     ccompose_add_test(ccompose_smoke_test         tests/smoke_test.c)
     ccompose_add_test(ccompose_transition_test    tests/transition_test.c)
     ccompose_add_test(compose_spacer_divider_test tests/spacer_divider_test.c)
+    ccompose_add_test(ccompose_button_test        tests/button_test.c)
 endif()
 
 # ---------- Install / export ----------
