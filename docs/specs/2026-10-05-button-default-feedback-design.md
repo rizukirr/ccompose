@@ -1,7 +1,7 @@
 ---
 title: button default feedback
 date: 2026-10-05
-status: draft
+status: approved
 ---
 
 # button default feedback: Design
