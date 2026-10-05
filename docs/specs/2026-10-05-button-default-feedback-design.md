@@ -12,8 +12,8 @@ status: approved
 
 ## Goals
 
-1. A `Button` with a non-transparent `.backgroundColor` reacts to hover with no extra caller code. Success: with the pointer over the button, the rectangle render command for that button has alpha equal to the declared alpha times `CC_BUTTON_HOVER_ALPHA` (default 0.85), truncated to an integer.
-2. The same `Button` reacts to a held left press. Success: with the pointer over the button and the pointer state down, the rectangle alpha equals the declared alpha times `CC_BUTTON_PRESS_ALPHA` (default 0.70), truncated to an integer.
+1. A `Button` with a non-transparent `.backgroundColor` reacts to hover with no extra caller code. Success: with the pointer over the button, the rectangle render command for that button has alpha equal to the declared alpha times `CC_BUTTON_HOVER_ALPHA` (default 0.85), stored as a float with no rounding.
+2. The same `Button` reacts to a held left press. Success: with the pointer over the button and the pointer state down, the rectangle alpha equals the declared alpha times `CC_BUTTON_PRESS_ALPHA` (default 0.70), stored as a float with no rounding.
 3. A `Button` the pointer is not over is untouched. Success: the rectangle color equals the declared color exactly, whether the pointer is up or down.
 4. Both factors can be overridden at compile time. Success: building with `-DCC_BUTTON_HOVER_ALPHA=0.5f` changes the hover result and produces no redefinition warning.
 5. `Row`, `Column`, `Box` and `Element` behave as before. Success: the three existing CTest targets pass unchanged.
