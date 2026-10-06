@@ -6,6 +6,7 @@
  *   3. Omitted options fall back to the documented defaults.
  *   4. Infinite mode emits nothing outside the track.
  *   5. The ring reserves a square of its size, 40px by default.
+ *   6. Each .sizing axis left unset falls back to its own default.
  * */
 
 #include <assert.h>
@@ -64,7 +65,7 @@ static Rects rects_in(CC_RenderCommandArray cmds, const char *parent_id) {
 }
 
 int main(void) {
-  CC_SetViewport(400.0f, 300.0f);
+  CC_SetViewport(400.0f, 400.0f);
   CC_SetErrorHandler(err_handler);
   CC_Init();
 
@@ -83,8 +84,17 @@ int main(void) {
       LinearProgress(0.0f);
     }
     Row("Opts", .layout = {.sizing = {Fixed(200), Fit()}}) {
-      LinearProgress(0.5f, .length = 80, .thickness = 10, .color = FILL,
+      LinearProgress(0.5f, .sizing = {Fixed(80), Fixed(10)}, .color = FILL,
                      .trackColor = TRACK);
+    }
+    Row("Tall", .layout = {.sizing = {Fixed(200), Fit()}}) {
+      LinearProgress(1.0f, .sizing = {.height = Fixed(8)});
+    }
+    Row("Narrow", .layout = {.sizing = {Fixed(200), Fit()}}) {
+      LinearProgress(1.0f, .sizing = {.width = Fixed(80)});
+    }
+    Row("Pct", .layout = {.sizing = {Fixed(200), Fit()}}) {
+      LinearProgress(1.0f, .sizing = {.width = Percent(0.5f)});
     }
     Row("Infinite", .layout = {.sizing = {Fixed(200), Fit()}}) {
       LinearProgress(CC_PROGRESS_INFINITE);
@@ -93,7 +103,10 @@ int main(void) {
       CircularProgress(0.5f);
     }
     Row("RingBig", .layout = {.sizing = {Fit(), Fit()}}) {
-      CircularProgress(CC_PROGRESS_INFINITE, .size = 64);
+      CircularProgress(CC_PROGRESS_INFINITE, .sizing = SizingAll(Fixed(64)));
+    }
+    Row("RingWide", .layout = {.sizing = {Fit(), Fit()}}) {
+      CircularProgress(0.5f, .sizing = {.width = Fixed(100)});
     }
   }
   CC_RenderCommandArray cmds = CC_End();
@@ -127,6 +140,20 @@ int main(void) {
   assert(same_color(opts.r[0]->renderData.rectangle.backgroundColor, TRACK));
   assert(same_color(opts.r[1]->renderData.rectangle.backgroundColor, FILL));
 
+  Rects tall = rects_in(cmds, "Tall");
+  assert(tall.count == 2 && "expected track and fill");
+  assert(close_to(tall.r[0]->boundingBox.width, 200.0f));
+  assert(close_to(tall.r[0]->boundingBox.height, 8.0f));
+
+  Rects narrow = rects_in(cmds, "Narrow");
+  assert(narrow.count == 2 && "expected track and fill");
+  assert(close_to(narrow.r[0]->boundingBox.width, 80.0f));
+  assert(close_to(narrow.r[0]->boundingBox.height, 4.0f));
+
+  Rects pct = rects_in(cmds, "Pct");
+  assert(pct.count == 2 && "expected track and fill");
+  assert(close_to(pct.r[0]->boundingBox.width, 100.0f));
+
   /* rects_in already limits the result to the parent's box, and the
    * track fills the parent, so anything it returns is inside the track. */
   Rects inf = rects_in(cmds, "Infinite");
@@ -138,6 +165,9 @@ int main(void) {
 
   CC_BoundingBox big = box_of("RingBig");
   assert(close_to(big.width, 64.0f) && close_to(big.height, 64.0f));
+
+  CC_BoundingBox wide = box_of("RingWide");
+  assert(close_to(wide.width, 100.0f) && close_to(wide.height, 40.0f));
 
   assert(!saw_error && "Clay error leaked");
 

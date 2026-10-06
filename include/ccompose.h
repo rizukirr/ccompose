@@ -1118,16 +1118,22 @@ void CC_VDivider(CC_DividerOpts opts);
  *
  *     LinearProgress(0.4f);
  *     LinearProgress(CC_PROGRESS_INFINITE);
- *     LinearProgress(ratio, .thickness = 6, .color = COLOR_ACCENT);
+ *     LinearProgress(ratio, .sizing = {.height = Fixed(8)});
+ *     LinearProgress(ratio, .sizing = {Fixed(240), Fixed(6)},
+ *                    .color = COLOR_ACCENT);
  *
- * LinearProgress is plain layout: a rounded track with a fill sized by
- * Percent(), so it also works in headless builds (where the clock is
+ * Both indicators are sized with .sizing, the same CC_Sizing that
+ * containers take in .layout, so Grow(), Fixed(), Percent() and
+ * SizingAll() all apply. An axis left unset gets the component's
+ * default. Fit() counts as unset, since a leaf has nothing to fit.
+ *
+ * LinearProgress is plain layout: a pill-shaped track with a fill sized
+ * by Percent(), so it also works in headless builds (where the clock is
  * fixed at 0). */
 #define CC_PROGRESS_INFINITE (-1.0f)
 
 typedef struct {
-  float length;        /* track width. 0 = Grow() to fill the parent. */
-  float thickness;     /* track height. Default 4px. */
+  CC_Sizing sizing;    /* width defaults to Grow(), height to Fixed(4). */
   CC_Color color;      /* fill. Defaults to the global font color. */
   CC_Color trackColor; /* track. Defaults to color at 25% of its alpha. */
 } CC_LinearProgressOpts;
@@ -1140,15 +1146,19 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts);
 /* CircularProgress - a ring that fills clockwise from 12 o'clock, or a
  * rotating arc for CC_PROGRESS_INFINITE.
  *
- *     CircularProgress(0.75f, .size = 48);
+ *     CircularProgress(0.75f, .sizing = SizingAll(Fixed(48)));
+ *     CircularProgress(ratio, .sizing = {Grow(), Grow()}, .thickness = 6);
  *     CircularProgress(CC_PROGRESS_INFINITE, .color = COLOR_ACCENT);
+ *
+ * The ring's diameter is the smaller side of its box, and it sits in
+ * the center, so a non-square .sizing still draws a circle.
  *
  * The ring is painted through the Draw slot pool (see
  * CC_AcquireDrawSlot), so it needs the raylib backend. In headless
- * builds, or when the pool is full, it reserves its square and draws
+ * builds, or when the pool is full, it reserves its box and draws
  * nothing. */
 typedef struct {
-  float size;          /* diameter. Default 40px. */
+  CC_Sizing sizing;    /* each axis defaults to Fixed(40). */
   float thickness;     /* stroke width. Default 4px. */
   CC_Color color;      /* arc. Defaults to the global font color. */
   CC_Color trackColor; /* full ring. Defaults to color at 25% alpha. */

@@ -608,12 +608,17 @@ static CC_Color cc__progress_track(CC_Color fill, CC_Color track) {
   return fill;
 }
 
+/* A zeroed axis and Fit() are the same value, and a progress leaf has
+ * no children to fit, so that value means the caller left it unset. */
+static CC_SizingAxis cc__axis_or(CC_SizingAxis axis, CC_SizingAxis fallback) {
+  bool unset = axis.type == CLAY__SIZING_TYPE_FIT &&
+               axis.size.minMax.min == 0.0f && axis.size.minMax.max == 0.0f;
+  return unset ? fallback : axis;
+}
+
 void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
-  float t = opts.thickness > 0.0f ? opts.thickness : 4.0f;
   CC_Color fill = (opts.color.a == 0) ? cc__font_global_color : opts.color;
   CC_Color track = cc__progress_track(fill, opts.trackColor);
-  Clay_SizingAxis w = opts.length > 0.0f ? CLAY_SIZING_FIXED(opts.length)
-                                         : CLAY_SIZING_GROW(0, 0);
   float start = 0.0f;
   float end = value > 1.0f ? 1.0f : value;
   if (value < 0.0f) {
@@ -626,12 +631,17 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
     end = p < 1.0f ? p : 1.0f;
   }
 
+  /* The height may be Grow() or Percent(), unknown here, so the pill
+   * shape comes from a radius the renderer clamps to half the height. */
   Clay__OpenElement();
   Clay__ConfigureOpenElement((CC_ElementDeclaration){
-      .layout = {.sizing = {.width = w, .height = CLAY_SIZING_FIXED(t)},
+      .layout = {.sizing = {.width = cc__axis_or(opts.sizing.width,
+                                                 CLAY_SIZING_GROW(0, 0)),
+                            .height = cc__axis_or(opts.sizing.height,
+                                                  CLAY_SIZING_FIXED(4))},
                  .layoutDirection = CC_LEFT_TO_RIGHT},
       .backgroundColor = track,
-      .cornerRadius = CLAY_CORNER_RADIUS(t / 2.0f)});
+      .cornerRadius = CLAY_CORNER_RADIUS(999)});
   if (start > 0.0f) {
     cc__leaf(CC_LEFT_TO_RIGHT,
              (CC_ElementDeclaration){
@@ -645,7 +655,7 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
             .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(end - start),
                                   .height = CLAY_SIZING_GROW(0, 0)}},
             .backgroundColor = fill,
-            .cornerRadius = CLAY_CORNER_RADIUS(t / 2.0f)});
+            .cornerRadius = CLAY_CORNER_RADIUS(999)});
   }
   Clay__CloseElement();
 }
@@ -675,10 +685,11 @@ static void cc__paint_ring(CC_BoundingBox bb, void *user) {
 #endif
 
 void CC_CircularProgress(float value, CC_CircularProgressOpts opts) {
-  float size = opts.size > 0.0f ? opts.size : 40.0f;
   CC_ElementDeclaration decl = {
-      .layout = {.sizing = {.width = CLAY_SIZING_FIXED(size),
-                            .height = CLAY_SIZING_FIXED(size)}}};
+      .layout = {.sizing = {.width = cc__axis_or(opts.sizing.width,
+                                                 CLAY_SIZING_FIXED(40)),
+                            .height = cc__axis_or(opts.sizing.height,
+                                                  CLAY_SIZING_FIXED(40))}}};
 #ifndef CCOMPOSE_NO_BACKEND
   if (cc__ring_pool_used < CC_DRAW_POOL_SIZE) {
     cc__ring_params *r = &cc__ring_pool[cc__ring_pool_used++];
