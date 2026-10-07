@@ -511,6 +511,9 @@ void CC_Init(void) {
   cc__initialized = true;
 }
 
+/* Depth of the open Column/Row/Box/Button scopes, see cc__parents. */
+static int cc__depth = 0;
+
 void CC_Begin(void) {
   if (!cc__initialized)
     CC_Init();
@@ -518,6 +521,7 @@ void CC_Begin(void) {
   cc__image_ref_pool_used = 0;
   cc__backend_begin_frame();
 #endif
+  cc__depth = 0;
   Clay_BeginLayout();
 }
 
@@ -537,11 +541,74 @@ CC_RenderCommandArray CC_End(void) {
  * visible, mid-grey matches typical dark-theme dividers., */
 static const CC_Color CC_DividerDefaultColor = {0x50, 0x54, 0x5C, 0xFF};
 
-static void cc__leaf(CC_LayoutDirection dir, CC_ElementDeclaration decl) {
+/* Clay has no z-stack layout, so Box builds one. Its first child stays
+ * in normal flow and sizes the box. Each later child is wrapped in a
+ * floating layer the size of the box that repeats the box's padding and
+ * alignment. Layers share zIndex 0, so Clay paints them in declaration
+ * order, nested boxes included.
+ * vibekit: a Fit() box is sized by its first child only, measure every
+ * child if a later one must be able to grow the box. */
+#define CC_MAX_DEPTH 64
+typedef struct {
+  bool box;
+  bool has_child;
+  Clay_Padding padding;
+  Clay_ChildAlignment alignment;
+} cc__parent;
+static cc__parent cc__parents[CC_MAX_DEPTH];
+
+/* Call before opening a child. Returns true when it opened a layer the
+ * caller must close after closing the child. */
+static bool cc__layer_begin(void) {
+  if (cc__depth == 0 || cc__depth > CC_MAX_DEPTH)
+    return false;
+  cc__parent *p = &cc__parents[cc__depth - 1];
+  if (!p->box)
+    return false;
+  if (!p->has_child) {
+    p->has_child = true;
+    return false;
+  }
+  Clay__OpenElement();
+  Clay__ConfigureOpenElement((Clay_ElementDeclaration){
+      .layout = {.sizing = {CLAY_SIZING_GROW(0, 0), CLAY_SIZING_GROW(0, 0)},
+                 .padding = p->padding,
+                 .childAlignment = p->alignment},
+      .floating = {.attachTo = CLAY_ATTACH_TO_PARENT,
+                   .pointerCaptureMode = CLAY_POINTER_CAPTURE_MODE_PASSTHROUGH,
+                   .clipTo = CLAY_CLIP_TO_ATTACHED_PARENT}});
+  return true;
+}
+
+static void cc__push_parent(bool box, const Clay_ElementDeclaration *decl) {
+  if (cc__depth < CC_MAX_DEPTH) {
+    cc__parents[cc__depth] =
+        (cc__parent){.box = box,
+                     .padding = decl->layout.padding,
+                     .alignment = decl->layout.childAlignment};
+  }
+  cc__depth++;
+}
+
+static void cc__bare_leaf(CC_LayoutDirection dir, CC_ElementDeclaration decl) {
   decl.layout.layoutDirection = dir;
   Clay__OpenElement();
   Clay__ConfigureOpenElement(decl);
   Clay__CloseElement();
+}
+
+static void cc__leaf(CC_LayoutDirection dir, CC_ElementDeclaration decl) {
+  bool layered = cc__layer_begin();
+  cc__bare_leaf(dir, decl);
+  if (layered)
+    Clay__CloseElement();
+}
+
+void CC__Text(CC_String text, CC_TextElementConfig config) {
+  bool layered = cc__layer_begin();
+  Clay__OpenTextElement(text, config);
+  if (layered)
+    Clay__CloseElement();
 }
 
 void CC_HSpacer(void) {
@@ -633,6 +700,7 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
 
   /* The height may be Grow() or Percent(), unknown here, so the pill
    * shape comes from a radius the renderer clamps to half the height. */
+  bool layered = cc__layer_begin();
   Clay__OpenElement();
   Clay__ConfigureOpenElement((CC_ElementDeclaration){
       .layout = {.sizing = {.width = cc__axis_or(opts.sizing.width,
@@ -643,13 +711,13 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
       .backgroundColor = track,
       .cornerRadius = CLAY_CORNER_RADIUS(999)});
   if (start > 0.0f) {
-    cc__leaf(CC_LEFT_TO_RIGHT,
+    cc__bare_leaf(CC_LEFT_TO_RIGHT,
              (CC_ElementDeclaration){
                  .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(start),
                                        .height = CLAY_SIZING_GROW(0, 0)}}});
   }
   if (end > start) {
-    cc__leaf(
+    cc__bare_leaf(
         CC_LEFT_TO_RIGHT,
         (CC_ElementDeclaration){
             .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(end - start),
@@ -658,6 +726,8 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
             .cornerRadius = CLAY_CORNER_RADIUS(999)});
   }
   Clay__CloseElement();
+  if (layered)
+    Clay__CloseElement();
 }
 
 #ifndef CCOMPOSE_NO_BACKEND
@@ -714,16 +784,33 @@ static void cc__open_element_with_id(CC_String id) {
   }
 }
 
+/* A child that sets its own .floating is already out of flow, so it
+ * gets no layer. active == 2 tells CC_CloseScope to close the layer. */
+static CC_Scope cc__open_scope(CC_String id, bool box,
+                               Clay_ElementDeclaration decl) {
+  bool layered =
+      decl.floating.attachTo == CLAY_ATTACH_TO_NONE && cc__layer_begin();
+  cc__open_element_with_id(id);
+  Clay__ConfigureOpenElement(decl);
+  cc__push_parent(box, &decl);
+  return (CC_Scope){.active = layered ? 2 : 1};
+}
+
 CC_Scope CC_OpenElement(CC_String id, Clay_LayoutDirection direction,
                         Clay_ElementDeclaration decl) {
   decl.layout.layoutDirection = direction;
-  cc__open_element_with_id(id);
-  Clay__ConfigureOpenElement(decl);
-  return (CC_Scope){.active = 1};
+  return cc__open_scope(id, false, decl);
+}
+
+CC_Scope CC_OpenBox(CC_String id, Clay_ElementDeclaration decl) {
+  decl.layout.layoutDirection = CLAY_TOP_TO_BOTTOM;
+  return cc__open_scope(id, true, decl);
 }
 
 CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
   decl.layout.layoutDirection = CLAY_LEFT_TO_RIGHT;
+  bool layered =
+      decl.floating.attachTo == CLAY_ATTACH_TO_NONE && cc__layer_begin();
   cc__open_element_with_id(id);
   /* vibekit: a press that started outside the button also counts, track
    * the press origin id if that ever matters. */
@@ -735,13 +822,18 @@ CC_Scope CC_OpenButton(CC_String id, Clay_ElementDeclaration decl) {
         down ? CC_BUTTON_PRESS_ALPHA : CC_BUTTON_HOVER_ALPHA;
   }
   Clay__ConfigureOpenElement(decl);
-  return (CC_Scope){.active = 1};
+  cc__push_parent(false, &decl);
+  return (CC_Scope){.active = layered ? 2 : 1};
 }
 
 void CC_CloseScope(CC_Scope *scope) {
   if (!scope->active)
     return;
   Clay__CloseElement();
+  if (cc__depth > 0)
+    cc__depth--;
+  if (scope->active == 2)
+    Clay__CloseElement();
   scope->active = 0;
 }
 

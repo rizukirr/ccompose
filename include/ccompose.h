@@ -893,12 +893,8 @@ void CC_SetViewport(float width, float height);
  *
  * Column  → CLAY_TOP_TO_BOTTOM. Vertical stacks, lists, sidebars.
  * Row     → CLAY_LEFT_TO_RIGHT. Horizontal stacks, toolbars, split panes.
- * Box     → CLAY_TOP_TO_BOTTOM (same as Column internally) — the name
- *           signals "direction doesn't matter here" for two patterns:
- *             1. Single-child decoration / frame (image box, avatar,
- *                badge, aspect-ratio container).
- *             2. Stacked overlays where every child uses .floating to
- *                take itself out of normal flow.
+ * Box     → a z-stack. Children are layered on top of each other.
+ *           Decoration frames (image box, avatar, badge) and overlays.
  *
  * Element(direction, "id", ...) is the generic form: use it when you
  * need to choose the direction at runtime (e.g. a toolbar that flips
@@ -949,6 +945,10 @@ typedef struct {
  * expand into. */
 CC_Scope CC_OpenElement(CC_String id, CC_LayoutDirection direction,
                         CC_ElementDeclaration decl);
+
+/* Opens a Box: like CC_OpenElement, and every child after the first is
+ * layered on top of it instead of flowing below it. */
+CC_Scope CC_OpenBox(CC_String id, CC_ElementDeclaration decl);
 
 /* Closes the element opened by CC_OpenElement. Idempotent: only closes
  * once per scope, subsequent calls are no-ops. */
@@ -1013,48 +1013,34 @@ void CC_CloseScope(CC_Scope *scope);
 #define Row(id_literal, ...)                                                   \
   Element(CLAY_LEFT_TO_RIGHT, id_literal, __VA_ARGS__)
 
-/* Box — a direction-neutral container. Clay has no native z-stack
- * layout mode (children always flow LTR or TTB), so Box is most useful
- * for two patterns:
+/* Box — a z-stack. Children are layered on top of each other in
+ * declaration order, the last one on top. Clay has no native z-stack
+ * layout mode, so Box builds one: the first child stays in normal flow
+ * and every later child is floated over the box. `.layout.padding` and
+ * `.layout.childAlignment` apply to every layer.
  *
- *   1. Single-child decoration / frame. The child fills the box (e.g.
- *      via `.layout.sizing = { Grow(), Grow() }`) and the box carries
- *      the styling:
+ *     Box("Timer",
+ *         .layout = { .sizing = { Fixed(200), Fixed(200) },
+ *                     .childAlignment = { .x = CC_ALIGN_X_CENTER,
+ *                                         .y = CC_ALIGN_Y_CENTER } }) {
+ *         CircularProgress(0.75f, .sizing = { Grow(), Grow() });
+ *         Text("24:59", .fontSize = 40);   // centered over the ring
+ *     }
  *
- *          Box("Avatar",
- *              .layout = { .sizing = { Fixed(64), Fixed(64) } },
- *              .image  = { .imageData = my_texture },
- *              .cornerRadius = RadiusAll(999)) { }
+ * A Fit() box takes its size from the first child only, so put the
+ * largest layer first or give the box an explicit size.
  *
- *   2. Stacked / overlay children — each child opts into .floating so
- *      it's taken out of normal flow and layered on top:
+ * Layers let the pointer through, so a Button under a later layer still
+ * gets its hover and click.
  *
- *          Box("Card",
- *              .layout = { .sizing = { Grow(), Fixed(220) } },
- *              .backgroundColor = COLOR_SURFACE,
- *              .cornerRadius    = RadiusAll(12)) {
- *
- *              // background image layer
- *              Box("CardBg",
- *                  .layout = { .sizing = { Grow(), Grow() } },
- *                  .image  = { .imageData = bg_texture },
- *                  .floating = { .attachTo = CLAY_ATTACH_TO_PARENT,
- *                                .zIndex = 0 }) { }
- *
- *              // foreground text layer
- *              Column("CardText",
- *                  .layout = { .padding = PadAll(16) },
- *                  .floating = { .attachTo = CLAY_ATTACH_TO_PARENT,
- *                                .zIndex = 1 }) {
- *                  Text("Title", .textColor = COLOR_TEXT,
- *                                .fontSize = 24);
- *              }
- *          }
- *
- * Internally Box maps to CLAY_TOP_TO_BOTTOM — any direction works when
- * there are 0–1 normal children or when all children are floating. */
+ * A child that sets its own `.floating` is left alone, for a custom
+ * attach point, offset or zIndex. */
+#define CC_BOX_IMPL_(scope, id_string, ...)                                    \
+  for (CC_Scope scope =                                                        \
+           CC_OpenBox((id_string), (CC_ElementDeclaration){__VA_ARGS__});      \
+       scope.active; CC_CloseScope(&scope))
 #define Box(id_literal, ...)                                                   \
-  Element(CLAY_TOP_TO_BOTTOM, id_literal, __VA_ARGS__)
+  CC_BOX_IMPL_(CC_SCOPE_NAME_(__COUNTER__), CC__Str(id_literal), __VA_ARGS__)
 
 /* =========================================================================
  * Spacer / Divider — layout leaves
@@ -1183,7 +1169,7 @@ void CC_CircularProgress(float value, CC_CircularProgressOpts opts);
  * passed to the macro — it must stay valid until the end of CC_End().
  *
  * Three flavors differ only in child layout direction:
- *     Draw        — top-to-bottom (same as Box).
+ *     Draw        — top-to-bottom (same as Column).
  *     DrawRow     — left-to-right (same as Row).
  *     DrawColumn  — top-to-bottom (same as Column).
  *
@@ -1204,7 +1190,7 @@ void CC_CircularProgress(float value, CC_CircularProgressOpts opts);
  * Slot storage is a fixed-size per-frame pool (see CC_AcquireDrawSlot).
  * No heap allocation, auto-reset every CC_Begin(). */
 #define Draw(id_literal, fn_, user_, ...)                                      \
-  Box((id_literal), __VA_ARGS__,                                               \
+  Column((id_literal), __VA_ARGS__,                                            \
       .custom = {.customData = CC_AcquireDrawSlot((fn_), (user_))})
 
 #define DrawRow(id_literal, fn_, user_, ...)                                   \
@@ -1559,10 +1545,12 @@ CC__TextStyleWithGlobalFont(CC_TextElementConfig style) {
   return style;
 }
 
+void CC__Text(CC_String text, CC_TextElementConfig config);
+
 /* Text element. Accepts any C string — length computed via strlen. */
 #define Text(str, ...)                                                         \
-  Clay__OpenTextElement(CC__Str(str), CC__TextStyleWithGlobalFont((            \
-                                          CC_TextElementConfig){__VA_ARGS__}))
+  CC__Text(CC__Str(str),                                                       \
+           CC__TextStyleWithGlobalFont((CC_TextElementConfig){__VA_ARGS__}))
 
 /* =========================================================================
  * Button + pointer interaction
