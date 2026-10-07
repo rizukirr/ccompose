@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.23)
 
 project(ccompose
-    VERSION 0.1.3
+    VERSION 0.1.4
     DESCRIPTION "Jetpack-Compose-shaped wrapper around Clay"
     HOMEPAGE_URL "https://github.com/rizukirr/ccompose"
     LANGUAGES C
