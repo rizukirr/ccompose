@@ -49,11 +49,10 @@ int main(void) {
 
   CC_Begin();
   Column("Root", .layout = {.sizing = {Grow(), Grow()}}) {
-    Box("Stack",
-        .layout = {.sizing = {Fixed(200), Fixed(100)},
-                   .padding = PadAll(10),
-                   .childAlignment = {.x = CC_ALIGN_X_CENTER,
-                                      .y = CC_ALIGN_Y_CENTER}}) {
+    Box("Stack", .layout = {.sizing = {Fixed(200), Fixed(100)},
+                            .padding = PadAll(10),
+                            .childAlignment = {.x = CC_ALIGN_X_CENTER,
+                                               .y = CC_ALIGN_Y_CENTER}}) {
       Column("A", .layout = {.sizing = {Fixed(50), Fixed(50)}}) {}
       Column("B", .layout = {.sizing = {Fixed(20), Fixed(20)}}) {}
       Row("C", .layout = {.sizing = {Grow(), Grow()}}) {}

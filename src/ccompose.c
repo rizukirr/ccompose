@@ -711,10 +711,11 @@ void CC_LinearProgress(float value, CC_LinearProgressOpts opts) {
       .backgroundColor = track,
       .cornerRadius = CLAY_CORNER_RADIUS(999)});
   if (start > 0.0f) {
-    cc__bare_leaf(CC_LEFT_TO_RIGHT,
-             (CC_ElementDeclaration){
-                 .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(start),
-                                       .height = CLAY_SIZING_GROW(0, 0)}}});
+    cc__bare_leaf(
+        CC_LEFT_TO_RIGHT,
+        (CC_ElementDeclaration){
+            .layout = {.sizing = {.width = CLAY_SIZING_PERCENT(start),
+                                  .height = CLAY_SIZING_GROW(0, 0)}}});
   }
   if (end > start) {
     cc__bare_leaf(

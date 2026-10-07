@@ -1191,7 +1191,7 @@ void CC_CircularProgress(float value, CC_CircularProgressOpts opts);
  * No heap allocation, auto-reset every CC_Begin(). */
 #define Draw(id_literal, fn_, user_, ...)                                      \
   Column((id_literal), __VA_ARGS__,                                            \
-      .custom = {.customData = CC_AcquireDrawSlot((fn_), (user_))})
+         .custom = {.customData = CC_AcquireDrawSlot((fn_), (user_))})
 
 #define DrawRow(id_literal, fn_, user_, ...)                                   \
   Row((id_literal), __VA_ARGS__,                                               \
