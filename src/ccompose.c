@@ -415,6 +415,24 @@ static Clay_Dimensions cc__default_measure_text(Clay_StringSlice text,
 
 #endif /* CCOMPOSE_NO_BACKEND */
 
+/* Per-frame pool behind Shadow(). Lives outside the backend #ifdef so
+ * headless tests can inspect the emitted CUSTOM commands. */
+static CC_ShadowSlot cc__shadow_pool[CC_SHADOW_POOL_SIZE];
+static int cc__shadow_pool_used = 0;
+
+CC_CustomElementConfig CC_Shadow(CC_ShadowOpts opts) {
+  if (cc__shadow_pool_used >= CC_SHADOW_POOL_SIZE)
+    return (CC_CustomElementConfig){0};
+  if (opts.blur < 0.0f)
+    opts.blur = 0.0f;
+  if (opts.color.a == 0)
+    opts.color = (CC_Color){0, 0, 0, 64};
+  CC_ShadowSlot *s = &cc__shadow_pool[cc__shadow_pool_used++];
+  s->_tag = CC_SHADOW_TAG;
+  s->opts = opts;
+  return (CC_CustomElementConfig){.customData = s};
+}
+
 /* ---------- Shared global font state ---------- */
 
 int CC_InitFont(int fontId, int base_size) {
@@ -522,6 +540,7 @@ void CC_Begin(void) {
   cc__backend_begin_frame();
 #endif
   cc__depth = 0;
+  cc__shadow_pool_used = 0;
   Clay_BeginLayout();
 }
 

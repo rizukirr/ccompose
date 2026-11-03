@@ -188,6 +188,7 @@ if(CCOMPOSE_BUILD_TESTS)
     ccompose_add_test(ccompose_button_test        tests/button_test.c)
     ccompose_add_test(ccompose_progress_test      tests/progress_test.c)
     ccompose_add_test(ccompose_box_test           tests/box_test.c)
+    ccompose_add_test(ccompose_shadow_test        tests/shadow_test.c)
 endif()
 
 # ---------- Install / export ----------
