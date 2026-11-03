@@ -337,6 +337,40 @@ typedef struct {
   void *user;
 } CC_DrawSlotFwd;
 
+/* Paints a Shadow() slot behind its element. The blur is faked with
+ * stacked rounded rectangles so it needs no shader. Each layer's alpha
+ * is chosen so the fully overlapped middle composites to the requested
+ * alpha. No scissor: the shadow is meant to reach outside the box.
+ * vibekit: Clay culls fully off-screen elements, so their shadow is not
+ * drawn even when it would reach on screen. Emit the shadow as its own
+ * floating root if that ever shows. */
+#define CC_SHADOW_LAYERS 8
+static void cc__paint_shadow(Clay_BoundingBox bb, float radius,
+                             const CC_ShadowSlot *slot) {
+  CC_ShadowOpts s = slot->opts;
+  Rectangle base = {bb.x + s.offset.x - s.spread, bb.y + s.offset.y - s.spread,
+                    bb.width + 2 * s.spread, bb.height + 2 * s.spread};
+  float base_radius = radius + s.spread > 0 ? radius + s.spread : 0;
+  int layers = s.blur > 0 ? CC_SHADOW_LAYERS : 1;
+  float a = s.color.a / 255.0f;
+  float layer_a = layers == 1 ? a : 1.0f - powf(1.0f - a, 1.0f / layers);
+  Color c = {(unsigned char)s.color.r, (unsigned char)s.color.g,
+             (unsigned char)s.color.b, (unsigned char)(layer_a * 255.0f + 0.5f)};
+  for (int i = layers; i >= 1; --i) {
+    float grow = layers == 1 ? 0 : s.blur * i / layers;
+    Rectangle r = {base.x - grow, base.y - grow, base.width + 2 * grow,
+                   base.height + 2 * grow};
+    if (r.width <= 0 || r.height <= 0)
+      continue;
+    float shorter = r.width < r.height ? r.width : r.height;
+    float rad = base_radius > 0 ? base_radius + grow : 0;
+    if (rad > 0)
+      DrawRectangleRounded(r, rad * 2 / shorter, 8, c);
+    else
+      DrawRectangleRec(r, c);
+  }
+}
+
 static bool cc__is_ccompose_draw_slot(const Clay_RenderCommand *renderCommand,
                                       CC_DrawSlotFwd **out_slot) {
   if (!renderCommand ||
@@ -642,6 +676,13 @@ void Clay_Raylib_Render(Clay_RenderCommandArray renderCommands, Font *fonts) {
       CustomLayoutElement *data = (CustomLayoutElement *)config->customData;
       if (!data)
         continue;
+
+      if (((CC_ShadowSlot *)data)->_tag == CC_SHADOW_TAG) {
+        cc__paint_shadow(renderCommand->boundingBox,
+                         config->cornerRadius.topLeft,
+                         (const CC_ShadowSlot *)data);
+        break;
+      }
 
       CC_DrawSlotFwd *slot = NULL;
       if (cc__is_ccompose_draw_slot(renderCommand, &slot)) {

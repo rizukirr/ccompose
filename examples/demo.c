@@ -157,7 +157,9 @@ static void FeatureCard(const char *id, const char *title, const char *body) {
                     .padding = PadAll(18),
                     .childGap = 8},
          .backgroundColor = COLOR_SURFACE_2, .cornerRadius = RadiusAll(10),
-         .border = {.color = COLOR_BORDER, .width = BorderAll(1)}) {
+         .border = {.color = COLOR_BORDER, .width = BorderAll(1)},
+         .custom = Shadow(.offset = {0, 4}, .blur = 14,
+                          .color = Color(0, 0, 0, 110))) {
     Text(title, .fontSize = 16, .textColor = COLOR_ACCENT);
     Text(body, .fontSize = 13, .textColor = COLOR_MUTED,
          .wrapMode = CC_TEXT_WRAP_WORDS, .lineHeight = 18);
