@@ -462,6 +462,21 @@ void Clay_Raylib_Render(Clay_RenderCommandArray renderCommands, Font *fonts) {
     case CLAY_RENDER_COMMAND_TYPE_IMAGE: {
       Clay_ImageRenderData *imgData = &renderCommand->renderData.image;
       CC_ImageRef *ref = (CC_ImageRef *)imgData->imageData;
+      /* Clay emits IMAGE before CUSTOM, so paint a Shadow() on the same
+       * element now to keep it behind the image. */
+      if (j + 1 < renderCommands.length) {
+        Clay_RenderCommand *next = Clay_RenderCommandArray_Get(&renderCommands, j + 1);
+        if (next->id == renderCommand->id &&
+            next->commandType == CLAY_RENDER_COMMAND_TYPE_CUSTOM &&
+            next->renderData.custom.customData &&
+            ((CC_ShadowSlot *)next->renderData.custom.customData)->_tag ==
+                CC_SHADOW_TAG) {
+          cc__paint_shadow(next->boundingBox,
+                           next->renderData.custom.cornerRadius.topLeft,
+                           (const CC_ShadowSlot *)next->renderData.custom.customData);
+          skip_index = j + 1;
+        }
+      }
       if (!ref || !ref->texture)
         break;
       Texture2D imageTexture = *ref->texture;
