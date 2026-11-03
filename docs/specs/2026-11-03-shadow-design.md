@@ -75,6 +75,8 @@ Pushback record: the user first asked about Windows support, raylib versus OpenG
 
 Docs: a header comment above `CC_ShadowOpts` covering fields, defaults, pool limit, the Draw exclusion and a usage snippet, plus a `Shadow` mention in the `.custom` entry of the element scope comment block.
 
+Recorded readings (repl amendment): "one existing card" in Testing means the `FeatureCard` helper in `examples/demo.c`, so every Home feature card gets the shadow. The renderer includes `ccompose.h`, so it uses a public `CC_ShadowSlot` type and `CC_SHADOW_TAG` / `CC_SHADOW_POOL_SIZE (128)` macros from the header instead of a forward declared copy.
+
 ## Open questions
 
 N/A: all decisions were settled in the brainstorm dialogue.
